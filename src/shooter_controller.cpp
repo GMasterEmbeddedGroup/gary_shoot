@@ -159,6 +159,9 @@ namespace gary_shoot{
         RCL_UNUSED(previous_state);
         using namespace std::chrono_literals;
         timer_update = this->create_wall_timer(1000ms/this->update_freq,[this] { data_publisher(); });
+        PickWheelPIDPublisher->on_activate();
+        RightShooterWheelPIDPublisher->on_activate();
+        LeftShooterWheelPIDPublisher->on_activate();
         RCLCPP_INFO(this->get_logger(), "activated");
         return CallbackReturn::SUCCESS;
     }
