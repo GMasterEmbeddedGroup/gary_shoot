@@ -209,20 +209,27 @@ namespace gary_shoot{
         std::uint8_t switch_state = 0;
         switch_state = msg->sw_left;
         if(prev_switch_state == msg->SW_MID) {
-            if (switch_state == msg->SW_UP) {
+            if(switch_state == msg->SW_DOWN){
+                picker_on = !picker_on;
+                RCLCPP_INFO(this->get_logger(),picker_on?"Picker on!":"Picker off!");
+            }else if (switch_state == msg->SW_UP) {
                 shooter_on = !shooter_on;
                 RCLCPP_INFO(this->get_logger(),shooter_on?"Shooter on!":"Shooter off!");
             }
-            else if(switch_state == msg->SW_DOWN){
-                picker_on = !picker_on;
-                RCLCPP_INFO(this->get_logger(),picker_on?"Picker on!":"Picker off!");
+            if(picker_on && !shooter_on){
+                picker_on = false;
+                RCLCPP_WARN(this->get_logger(),"Picker off!: cannot turn picker on while shooter is off!");
             }
+        }
+        if(msg->sw_right == msg->SW_DOWN){
+            shooter_on = false;
+            picker_on = false;
         }
         prev_switch_state = switch_state;
     }
 
     void ShooterController::data_publisher() {
-        if(this->picker_on){
+        if(this->picker_on && this->shooter_on){
             this->pick_wheel_current_set = this->pick_wheel_pid_target;
         }else{
             this->pick_wheel_current_set = static_cast<double>(0.0f);
