@@ -29,8 +29,8 @@ namespace gary_shoot{
         rclcpp_lifecycle::LifecyclePublisher<std_msgs::msg::Float64>::SharedPtr LeftShooterWheelPIDPublisher;
         std_msgs::msg::Float64 RightShooterWheelPIDMsg;
         rclcpp_lifecycle::LifecyclePublisher<std_msgs::msg::Float64>::SharedPtr RightShooterWheelPIDPublisher;
-        std_msgs::msg::Float64 PickWheelPIDMsg;
-        rclcpp_lifecycle::LifecyclePublisher<std_msgs::msg::Float64>::SharedPtr PickWheelPIDPublisher;
+        std_msgs::msg::Float64 TriggerWheelPIDMsg;
+        rclcpp_lifecycle::LifecyclePublisher<std_msgs::msg::Float64>::SharedPtr TriggerWheelPIDPublisher;
 
         void rc_callback(gary_msgs::msg::DR16Receiver::SharedPtr msg);
         rclcpp::Subscription<gary_msgs::msg::DR16Receiver>::SharedPtr RemoteControlSubscription;
@@ -53,7 +53,7 @@ namespace gary_shoot{
 
         std::uint8_t prev_switch_state;
         bool shooter_on;
-        bool picker_on;
+        bool trigger_on;
     };
 
     ShooterController::ShooterController(const rclcpp::NodeOptions &options) : rclcpp_lifecycle::LifecycleNode(
@@ -76,7 +76,7 @@ namespace gary_shoot{
         this->update_freq = 50.0f;
         this->prev_switch_state = 0;
         this->shooter_on = false;
-        this->picker_on = false;
+        this->trigger_on = false;
         this->shooter_wheel_pid_current_set = static_cast<double>(0.0f);
         this->pick_wheel_current_set = static_cast<double>(0.0f);
     }
@@ -111,7 +111,7 @@ namespace gary_shoot{
             return CallbackReturn::FAILURE;
         }
         pick_wheel_topic = this->get_parameter("pick_wheel_topic").as_string();
-        PickWheelPIDPublisher =
+        TriggerWheelPIDPublisher =
                 create_publisher<std_msgs::msg::Float64>(pick_wheel_topic,rclcpp::SystemDefaultsQoS());
 
         if(this->get_parameter("shooter_wheel_pid_target").get_type() != rclcpp::PARAMETER_DOUBLE){
@@ -146,7 +146,7 @@ namespace gary_shoot{
         RCL_UNUSED(previous_state);
 
         timer_update->reset();
-        PickWheelPIDPublisher.reset();
+        TriggerWheelPIDPublisher.reset();
         RightShooterWheelPIDPublisher.reset();
         LeftShooterWheelPIDPublisher.reset();
         RemoteControlSubscription.reset();
@@ -159,7 +159,7 @@ namespace gary_shoot{
         RCL_UNUSED(previous_state);
         using namespace std::chrono_literals;
         timer_update = this->create_wall_timer(1000ms/this->update_freq,[this] { data_publisher(); });
-        PickWheelPIDPublisher->on_activate();
+        TriggerWheelPIDPublisher->on_activate();
         RightShooterWheelPIDPublisher->on_activate();
         LeftShooterWheelPIDPublisher->on_activate();
         RCLCPP_INFO(this->get_logger(), "activated");
@@ -170,7 +170,7 @@ namespace gary_shoot{
         RCL_UNUSED(previous_state);
 
         timer_update->reset();
-        PickWheelPIDPublisher->on_deactivate();
+        TriggerWheelPIDPublisher->on_deactivate();
         RightShooterWheelPIDPublisher->on_deactivate();
         LeftShooterWheelPIDPublisher->on_deactivate();
         RemoteControlSubscription.reset();
@@ -183,7 +183,7 @@ namespace gary_shoot{
         RCL_UNUSED(previous_state);
 
         if(timer_update.get()!=nullptr) timer_update->reset();
-        if(PickWheelPIDPublisher.get() != nullptr) PickWheelPIDPublisher.reset();
+        if(TriggerWheelPIDPublisher.get() != nullptr) TriggerWheelPIDPublisher.reset();
         if(RightShooterWheelPIDPublisher.get() != nullptr) RightShooterWheelPIDPublisher.reset();
         if(LeftShooterWheelPIDPublisher.get() != nullptr) LeftShooterWheelPIDPublisher.reset();
         if(RemoteControlSubscription.get() != nullptr) RemoteControlSubscription.reset();
@@ -196,7 +196,7 @@ namespace gary_shoot{
         RCL_UNUSED(previous_state);
 
         if(timer_update.get()!=nullptr) timer_update->reset();
-        if(PickWheelPIDPublisher.get() != nullptr) PickWheelPIDPublisher.reset();
+        if(TriggerWheelPIDPublisher.get() != nullptr) TriggerWheelPIDPublisher.reset();
         if(RightShooterWheelPIDPublisher.get() != nullptr) RightShooterWheelPIDPublisher.reset();
         if(LeftShooterWheelPIDPublisher.get() != nullptr) LeftShooterWheelPIDPublisher.reset();
         if(RemoteControlSubscription.get() != nullptr) RemoteControlSubscription.reset();
@@ -210,26 +210,32 @@ namespace gary_shoot{
         switch_state = msg->sw_left;
         if(prev_switch_state == msg->SW_MID) {
             if(switch_state == msg->SW_DOWN){
-                picker_on = !picker_on;
-                RCLCPP_INFO(this->get_logger(),picker_on?"Picker on!":"Picker off!");
+                trigger_on = !trigger_on;
+                RCLCPP_INFO(this->get_logger(),trigger_on?"Trigger on!":"Trigger off!");
             }else if (switch_state == msg->SW_UP) {
                 shooter_on = !shooter_on;
                 RCLCPP_INFO(this->get_logger(),shooter_on?"Shooter on!":"Shooter off!");
             }
-            if(picker_on && !shooter_on){
-                picker_on = false;
-                RCLCPP_WARN(this->get_logger(),"Picker off!: cannot turn picker on while shooter is off!");
+            if(trigger_on && !shooter_on){
+                trigger_on = false;
+                RCLCPP_WARN(this->get_logger(),"Trigger off!: cannot turn trigger on while shooter is off!");
             }
         }
         if(msg->sw_right == msg->SW_DOWN){
-            shooter_on = false;
-            picker_on = false;
+            if(shooter_on) {
+                shooter_on = false;
+                RCLCPP_WARN(this->get_logger(),"Shooter off! Zero force!");
+            }
+            if(trigger_on) {
+                trigger_on = false;
+                RCLCPP_WARN(this->get_logger(),"Trigger off! Zero force!");
+            }
         }
         prev_switch_state = switch_state;
     }
 
     void ShooterController::data_publisher() {
-        if(this->picker_on && this->shooter_on){
+        if(this->trigger_on && this->shooter_on){
             this->pick_wheel_current_set = this->pick_wheel_pid_target;
         }else{
             this->pick_wheel_current_set = static_cast<double>(0.0f);
@@ -247,14 +253,14 @@ namespace gary_shoot{
 
         this->LeftShooterWheelPIDMsg.data = (0-shooter_wheel_pid_current_set);
         this->RightShooterWheelPIDMsg.data = shooter_wheel_pid_current_set;
-        this->PickWheelPIDMsg.data = pick_wheel_current_set;
+        this->TriggerWheelPIDMsg.data = pick_wheel_current_set;
 
         RCLCPP_DEBUG(this->get_logger(),"L:%lf, R:%lf, P:%lf",this->LeftShooterWheelPIDMsg.data,
-                     this->RightShooterWheelPIDMsg.data,this->PickWheelPIDMsg.data);
+                     this->RightShooterWheelPIDMsg.data,this->TriggerWheelPIDMsg.data);
 
         LeftShooterWheelPIDPublisher->publish(LeftShooterWheelPIDMsg);
         RightShooterWheelPIDPublisher->publish(RightShooterWheelPIDMsg);
-        PickWheelPIDPublisher->publish(PickWheelPIDMsg);
+        TriggerWheelPIDPublisher->publish(TriggerWheelPIDMsg);
     }
 }
 
