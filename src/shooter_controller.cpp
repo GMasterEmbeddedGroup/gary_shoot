@@ -60,17 +60,17 @@ namespace gary_shoot{
             "shooter_controller", options) {
         this->declare_parameter("update_freq", 50.0f);
         this->declare_parameter("remote_control_topic", "/remote_control");
-        this->declare_parameter("left_shooter_wheel_topic", "/left_shooter_wheel");
-        this->declare_parameter("right_shooter_wheel_topic", "/right_shooter_wheel");
+        this->declare_parameter("left_shooter_wheel_topic", "/fric_left_pid/cmd");
+        this->declare_parameter("right_shooter_wheel_topic", "/fric_right_pid/cmd");
         this->declare_parameter("shooter_wheel_pid_target", 8500.0f);
-        this->declare_parameter("pick_wheel_topic", "/pick_wheel");
+        this->declare_parameter("pick_wheel_topic", "/trigger_pid/cmd");
         this->declare_parameter("pick_wheel_pid_target", 3000.0f);
 
         this->remote_control_topic = "/remote_control";
-        this->left_wheel_topic = "/left_shooter_wheel";
-        this->right_wheel_topic = "/right_shooter_wheel";
+        this->left_wheel_topic = "/fric_left_pid/cmd";
+        this->right_wheel_topic = "/fric_right_pid/cmd";
         this->shooter_wheel_pid_target = static_cast<double>(8500.0f);
-        this->pick_wheel_topic = "/pick_wheel";
+        this->pick_wheel_topic = "/trigger_pid/cmd";
         this->pick_wheel_pid_target = static_cast<double>(3000.0f);
 
         this->update_freq = 50.0f;
