@@ -1,84 +1,49 @@
+#include "gary_shoot/shooter_controller.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include "rclcpp_lifecycle/lifecycle_node.hpp"
-#include "gary_msgs/msg/dr16_receiver.hpp"
 #include "std_msgs/msg/float64.hpp"
+#include "diagnostic_msgs/msg/diagnostic_array.hpp"
 #include <string>
 #include <cmath>
 #include <chrono>
+#include <limits>
 
 namespace gary_shoot{
 
     using CallbackReturn = rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn;
 
-    class ShooterController : public rclcpp_lifecycle::LifecycleNode {
-
-    public:
-        explicit ShooterController(const rclcpp::NodeOptions & options);
-
-
-    private:
-
-        CallbackReturn on_configure(const rclcpp_lifecycle::State & previous_state) override;
-        CallbackReturn on_cleanup(const rclcpp_lifecycle::State & previous_state) override;
-        CallbackReturn on_activate(const rclcpp_lifecycle::State & previous_state) override;
-        CallbackReturn on_deactivate(const rclcpp_lifecycle::State & previous_state) override;
-        CallbackReturn on_shutdown(const rclcpp_lifecycle::State & previous_state) override;
-        CallbackReturn on_error(const rclcpp_lifecycle::State & previous_state) override;
-
-        std_msgs::msg::Float64 LeftShooterWheelPIDMsg;
-        rclcpp_lifecycle::LifecyclePublisher<std_msgs::msg::Float64>::SharedPtr LeftShooterWheelPIDPublisher;
-        std_msgs::msg::Float64 RightShooterWheelPIDMsg;
-        rclcpp_lifecycle::LifecyclePublisher<std_msgs::msg::Float64>::SharedPtr RightShooterWheelPIDPublisher;
-        std_msgs::msg::Float64 TriggerWheelPIDMsg;
-        rclcpp_lifecycle::LifecyclePublisher<std_msgs::msg::Float64>::SharedPtr TriggerWheelPIDPublisher;
-
-        void rc_callback(gary_msgs::msg::DR16Receiver::SharedPtr msg);
-        rclcpp::Subscription<gary_msgs::msg::DR16Receiver>::SharedPtr RemoteControlSubscription;
-
-        void data_publisher();
-
-        //timer
-        rclcpp::TimerBase::SharedPtr timer_update;
-
-        double update_freq;
-
-        std::string remote_control_topic;
-        std::string left_wheel_topic;
-        std::string right_wheel_topic;
-        double shooter_wheel_pid_target;
-        double shooter_wheel_pid_current_set;
-        std::string pick_wheel_topic;
-        double pick_wheel_pid_target;
-        double pick_wheel_current_set;
-
-        std::uint8_t prev_switch_state;
-        bool shooter_on;
-        bool trigger_on;
-    };
-
     ShooterController::ShooterController(const rclcpp::NodeOptions &options) : rclcpp_lifecycle::LifecycleNode(
             "shooter_controller", options) {
-        this->declare_parameter("update_freq", 50.0f);
-        this->declare_parameter("remote_control_topic", "/remote_control");
-        this->declare_parameter("left_shooter_wheel_topic", "/fric_left_pid/cmd");
-        this->declare_parameter("right_shooter_wheel_topic", "/fric_right_pid/cmd");
-        this->declare_parameter("shooter_wheel_pid_target", 8500.0f);
-        this->declare_parameter("pick_wheel_topic", "/trigger_pid/cmd");
-        this->declare_parameter("pick_wheel_pid_target", 3000.0f);
+        this->declare_parameter("update_freq", 100.0f);
+        this->declare_parameter("shooter_wheel_receive_topic", "/shooter_wheel_controller_pid_set");
+        this->declare_parameter("trigger_wheel_receive_topic", "/trigger_wheel_controller_pid_set");
+        this->declare_parameter("left_shooter_wheel_send_topic", "/fric_left_pid/cmd");
+        this->declare_parameter("right_shooter_wheel_send_topic", "/fric_right_pid/cmd");
+        this->declare_parameter("trigger_wheel_send_topic", "/trigger_pid/cmd");
+        this->declare_parameter("left_shooter_wheel_diag_name", "fric_left");
+        this->declare_parameter("right_shooter_wheel_diag_name", "fric_right");
+        this->declare_parameter("trigger_wheel_diag_name", "trigger");
+        this->declare_parameter("diagnostic_topic", "/diagnostics");
 
-        this->remote_control_topic = "/remote_control";
-        this->left_wheel_topic = "/fric_left_pid/cmd";
-        this->right_wheel_topic = "/fric_right_pid/cmd";
-        this->shooter_wheel_pid_target = static_cast<double>(8500.0f);
-        this->pick_wheel_topic = "/trigger_pid/cmd";
-        this->pick_wheel_pid_target = static_cast<double>(3000.0f);
+        this->shooter_wheel_receive_topic = "/shooter_wheel_controller_pid_set";
+        this->trigger_wheel_receive_topic = "/trigger_wheel_controller_pid_set";
+        this->left_wheel_send_topic = "/fric_left_pid/cmd";
+        this->right_wheel_send_topic = "/fric_right_pid/cmd";
+        this->shooter_wheel_pid_target = static_cast<double>(0.0f);
+        this->trigger_wheel_send_topic = "/trigger_pid/cmd";
+        this->trigger_wheel_pid_target = static_cast<double>(0.0f);
 
-        this->update_freq = 50.0f;
-        this->prev_switch_state = 0;
+        this->diagnostic_topic = "/diagnostics";
+        this->motor_offline = true;
+
+        this->update_freq = 100.0f;
         this->shooter_on = false;
         this->trigger_on = false;
         this->shooter_wheel_pid_current_set = static_cast<double>(0.0f);
-        this->pick_wheel_current_set = static_cast<double>(0.0f);
+        this->trigger_wheel_current_set = static_cast<double>(0.0f);
+
+        diag_names.clear();
+
     }
 
     CallbackReturn ShooterController::on_configure(const rclcpp_lifecycle::State &previous_state) {
@@ -90,53 +55,70 @@ namespace gary_shoot{
         }
         this->update_freq = this->get_parameter("update_freq").as_double();
 
-        if(this->get_parameter("left_shooter_wheel_topic").get_type() != rclcpp::PARAMETER_STRING){
-            RCLCPP_ERROR(this->get_logger(), "TYPE ERROR: \"left_shooter_wheel_topic\" must be a string.");
+        if(this->get_parameter("left_shooter_wheel_send_topic").get_type() != rclcpp::PARAMETER_STRING){
+            RCLCPP_ERROR(this->get_logger(), "TYPE ERROR: \"left_shooter_wheel_send_topic\" must be a string.");
             return CallbackReturn::FAILURE;
         }
-        left_wheel_topic = this->get_parameter("left_shooter_wheel_topic").as_string();
+        left_wheel_send_topic = this->get_parameter("left_shooter_wheel_send_topic").as_string();
         LeftShooterWheelPIDPublisher =
-                create_publisher<std_msgs::msg::Float64>(left_wheel_topic,rclcpp::SystemDefaultsQoS());
+                create_publisher<std_msgs::msg::Float64>(left_wheel_send_topic,rclcpp::SystemDefaultsQoS());
 
-        if(this->get_parameter("right_shooter_wheel_topic").get_type() != rclcpp::PARAMETER_STRING){
-            RCLCPP_ERROR(this->get_logger(), "TYPE ERROR: \"right_shooter_wheel_topic\" must be a string.");
+        if(this->get_parameter("right_shooter_wheel_send_topic").get_type() != rclcpp::PARAMETER_STRING){
+            RCLCPP_ERROR(this->get_logger(), "TYPE ERROR: \"right_shooter_wheel_send_topic\" must be a string.");
             return CallbackReturn::FAILURE;
         }
-        right_wheel_topic = this->get_parameter("right_shooter_wheel_topic").as_string();
+        right_wheel_send_topic = this->get_parameter("right_shooter_wheel_send_topic").as_string();
         RightShooterWheelPIDPublisher =
-                create_publisher<std_msgs::msg::Float64>(right_wheel_topic,rclcpp::SystemDefaultsQoS());
+                create_publisher<std_msgs::msg::Float64>(right_wheel_send_topic,rclcpp::SystemDefaultsQoS());
 
-        if(this->get_parameter("pick_wheel_topic").get_type() != rclcpp::PARAMETER_STRING){
-            RCLCPP_ERROR(this->get_logger(), "TYPE ERROR: \"pick_wheel_topic\" must be a string.");
+        if(this->get_parameter("trigger_wheel_send_topic").get_type() != rclcpp::PARAMETER_STRING){
+            RCLCPP_ERROR(this->get_logger(), "TYPE ERROR: \"trigger_wheel_send_topic\" must be a string.");
             return CallbackReturn::FAILURE;
         }
-        pick_wheel_topic = this->get_parameter("pick_wheel_topic").as_string();
+        trigger_wheel_send_topic = this->get_parameter("trigger_wheel_send_topic").as_string();
         TriggerWheelPIDPublisher =
-                create_publisher<std_msgs::msg::Float64>(pick_wheel_topic,rclcpp::SystemDefaultsQoS());
+                create_publisher<std_msgs::msg::Float64>(trigger_wheel_send_topic,rclcpp::SystemDefaultsQoS());
 
-        if(this->get_parameter("shooter_wheel_pid_target").get_type() != rclcpp::PARAMETER_DOUBLE){
-            RCLCPP_ERROR(this->get_logger(), "TYPE ERROR: \"shooter_wheel_pid_target\" must be double.");
+
+        if(this->get_parameter("shooter_wheel_receive_topic").get_type() != rclcpp::PARAMETER_STRING){
+            RCLCPP_ERROR(this->get_logger(), "TYPE ERROR: \"shooter_wheel_receive_topic\" must be a string.");
             return CallbackReturn::FAILURE;
         }
-        shooter_wheel_pid_target = abs(this->get_parameter("shooter_wheel_pid_target").as_double());
-
-        if(this->get_parameter("pick_wheel_pid_target").get_type() != rclcpp::PARAMETER_DOUBLE){
-            RCLCPP_ERROR(this->get_logger(), "TYPE ERROR: \"pick_wheel_pid_target\" must be double.");
-            return CallbackReturn::FAILURE;
-        }
-        pick_wheel_pid_target = abs(this->get_parameter("pick_wheel_pid_target").as_double());
-
-        if(this->get_parameter("remote_control_topic").get_type() != rclcpp::PARAMETER_STRING){
-            RCLCPP_ERROR(this->get_logger(), "TYPE ERROR: \"remote_control_topic\" must be a string.");
-            return CallbackReturn::FAILURE;
-        }
-        remote_control_topic = this->get_parameter("remote_control_topic").as_string();
-
-        this->RemoteControlSubscription =
-                this->create_subscription<gary_msgs::msg::DR16Receiver>(
-                                        remote_control_topic,
+        shooter_wheel_receive_topic = this->get_parameter("shooter_wheel_receive_topic").as_string();
+        this->ShooterSubscription =
+                this->create_subscription<std_msgs::msg::Float64>(
+                        shooter_wheel_receive_topic,
                                         rclcpp::SystemDefaultsQoS(),
-                                        std::bind(&ShooterController::rc_callback,this,std::placeholders::_1));
+                                        std::bind(&ShooterController::shooter_callback,this,std::placeholders::_1));
+
+
+        if(this->get_parameter("trigger_wheel_receive_topic").get_type() != rclcpp::PARAMETER_STRING){
+            RCLCPP_ERROR(this->get_logger(), "TYPE ERROR: \"trigger_wheel_receive_topic\" must be a string.");
+            return CallbackReturn::FAILURE;
+        }
+        trigger_wheel_receive_topic = this->get_parameter("trigger_wheel_receive_topic").as_string();
+        this->TriggerSubscription =
+                this->create_subscription<std_msgs::msg::Float64>(
+                        trigger_wheel_receive_topic,
+                                        rclcpp::SystemDefaultsQoS(),
+                                        std::bind(&ShooterController::trigger_callback,this,std::placeholders::_1));
+
+
+        if(this->get_parameter("diagnostic_topic").get_type() != rclcpp::PARAMETER_STRING){
+            RCLCPP_ERROR(this->get_logger(), "TYPE ERROR: \"diagnostic_topic\" must be a string.");
+            return CallbackReturn::FAILURE;
+        }
+        diagnostic_topic = this->get_parameter("diagnostic_topic").as_string();
+        this->DiagnosticSubscription =
+                this->create_subscription<diagnostic_msgs::msg::DiagnosticArray>(
+                        diagnostic_topic,
+                                        rclcpp::SystemDefaultsQoS(),
+                                        std::bind(&ShooterController::diag_callback,this,std::placeholders::_1));
+
+
+        diag_names.emplace_back(this->get_parameter("trigger_wheel_diag_name").as_string());
+        diag_names.emplace_back(this->get_parameter("left_shooter_wheel_diag_name").as_string());
+        diag_names.emplace_back(this->get_parameter("right_shooter_wheel_diag_name").as_string());
 
         RCLCPP_INFO(this->get_logger(), "configured");
         return CallbackReturn::SUCCESS;
@@ -149,7 +131,10 @@ namespace gary_shoot{
         TriggerWheelPIDPublisher.reset();
         RightShooterWheelPIDPublisher.reset();
         LeftShooterWheelPIDPublisher.reset();
-        RemoteControlSubscription.reset();
+        TriggerSubscription.reset();
+        ShooterSubscription.reset();
+
+        diag_names.clear();
 
         RCLCPP_INFO(this->get_logger(), "cleaned up");
         return CallbackReturn::SUCCESS;
@@ -173,7 +158,8 @@ namespace gary_shoot{
         TriggerWheelPIDPublisher->on_deactivate();
         RightShooterWheelPIDPublisher->on_deactivate();
         LeftShooterWheelPIDPublisher->on_deactivate();
-        RemoteControlSubscription.reset();
+        TriggerSubscription.reset();
+        ShooterSubscription.reset();
 
         RCLCPP_INFO(this->get_logger(), "deactivated");
         return CallbackReturn::SUCCESS;
@@ -186,7 +172,10 @@ namespace gary_shoot{
         if(TriggerWheelPIDPublisher.get() != nullptr) TriggerWheelPIDPublisher.reset();
         if(RightShooterWheelPIDPublisher.get() != nullptr) RightShooterWheelPIDPublisher.reset();
         if(LeftShooterWheelPIDPublisher.get() != nullptr) LeftShooterWheelPIDPublisher.reset();
-        if(RemoteControlSubscription.get() != nullptr) RemoteControlSubscription.reset();
+        if(TriggerSubscription.get() != nullptr) TriggerSubscription.reset();
+        if(ShooterSubscription.get() != nullptr) ShooterSubscription.reset();
+
+        diag_names.clear();
 
         RCLCPP_INFO(this->get_logger(), "shutdown");
         return CallbackReturn::SUCCESS;
@@ -199,69 +188,96 @@ namespace gary_shoot{
         if(TriggerWheelPIDPublisher.get() != nullptr) TriggerWheelPIDPublisher.reset();
         if(RightShooterWheelPIDPublisher.get() != nullptr) RightShooterWheelPIDPublisher.reset();
         if(LeftShooterWheelPIDPublisher.get() != nullptr) LeftShooterWheelPIDPublisher.reset();
-        if(RemoteControlSubscription.get() != nullptr) RemoteControlSubscription.reset();
+        if(TriggerSubscription.get() != nullptr) TriggerSubscription.reset();
+        if(ShooterSubscription.get() != nullptr) ShooterSubscription.reset();
+
+        diag_names.clear();
 
         RCLCPP_ERROR(this->get_logger(), "Error happened");
         return CallbackReturn::SUCCESS;
     }
 
-    void ShooterController::rc_callback(gary_msgs::msg::DR16Receiver::SharedPtr msg) {
-        std::uint8_t switch_state = 0;
-        switch_state = msg->sw_left;
-        if(prev_switch_state == msg->SW_MID) {
-            if(switch_state == msg->SW_DOWN){
-                trigger_on = !trigger_on;
-                RCLCPP_INFO(this->get_logger(),trigger_on?"Trigger on!":"Trigger off!");
-            }else if (switch_state == msg->SW_UP) {
-                shooter_on = !shooter_on;
-                RCLCPP_INFO(this->get_logger(),shooter_on?"Shooter on!":"Shooter off!");
-            }
-            if(trigger_on && !shooter_on){
-                trigger_on = false;
-                RCLCPP_WARN(this->get_logger(),"Trigger off!: cannot turn trigger on while shooter is off!");
-            }
-        }
-        if(msg->sw_right == msg->SW_DOWN){
-            if(shooter_on) {
-                shooter_on = false;
-                RCLCPP_WARN(this->get_logger(),"Shooter off! Zero force!");
-            }
-            if(trigger_on) {
-                trigger_on = false;
-                RCLCPP_WARN(this->get_logger(),"Trigger off! Zero force!");
-            }
-        }
-        prev_switch_state = switch_state;
-    }
-
     void ShooterController::data_publisher() {
-        if(this->trigger_on && this->shooter_on){
-            this->pick_wheel_current_set = this->pick_wheel_pid_target;
-        }else{
-            this->pick_wheel_current_set = static_cast<double>(0.0f);
-        }
-        if(this->shooter_on){
-            if(this->shooter_wheel_pid_current_set <= this->shooter_wheel_pid_target) {
-                this->shooter_wheel_pid_current_set += (((1000 / this->update_freq) / 5000) *
-                                                        this->shooter_wheel_pid_target);
-            }else{
-                this->shooter_wheel_pid_current_set = this->shooter_wheel_pid_target;
+        static bool offline_warned = false;
+        if(!motor_offline){
+            if (this->trigger_on && this->shooter_on) {
+                this->trigger_wheel_current_set = this->trigger_wheel_pid_target;
+            } else {
+                this->trigger_wheel_current_set = static_cast<double>(0.0f);
             }
+            if (this->shooter_on) {
+                if (this->shooter_wheel_pid_current_set < this->shooter_wheel_pid_target) {
+                    this->shooter_wheel_pid_current_set += (((1000 / this->update_freq) / 5000) *
+                                                            this->shooter_wheel_pid_target);
+                } else {
+                    this->shooter_wheel_pid_current_set = this->shooter_wheel_pid_target;
+                }
+            } else {
+                this->shooter_wheel_pid_current_set = static_cast<double>(0.0f);
+            }
+            offline_warned = false;
         }else{
+            if(!offline_warned) {
+                RCLCPP_WARN(this->get_logger(), "Shooter shut down due to motor offline.");
+                offline_warned = true;
+            }
+            this->trigger_wheel_current_set = static_cast<double>(0.0f);
             this->shooter_wheel_pid_current_set = static_cast<double>(0.0f);
         }
 
         this->LeftShooterWheelPIDMsg.data = (0-shooter_wheel_pid_current_set);
         this->RightShooterWheelPIDMsg.data = shooter_wheel_pid_current_set;
-        this->TriggerWheelPIDMsg.data = pick_wheel_current_set;
-
-        RCLCPP_DEBUG(this->get_logger(),"L:%lf, R:%lf, P:%lf",this->LeftShooterWheelPIDMsg.data,
+        this->TriggerWheelPIDMsg.data = trigger_wheel_current_set;
+        auto clock = rclcpp::Clock();
+        RCLCPP_DEBUG_THROTTLE(this->get_logger(), clock, 500, "L:%lf, R:%lf, P:%lf",this->LeftShooterWheelPIDMsg.data,
                      this->RightShooterWheelPIDMsg.data,this->TriggerWheelPIDMsg.data);
 
         LeftShooterWheelPIDPublisher->publish(LeftShooterWheelPIDMsg);
         RightShooterWheelPIDPublisher->publish(RightShooterWheelPIDMsg);
         TriggerWheelPIDPublisher->publish(TriggerWheelPIDMsg);
     }
+
+    void ShooterController::shooter_callback(std_msgs::msg::Float64::SharedPtr msg) {
+        if(msg->data > 0){
+            this->shooter_wheel_pid_target = msg->data;
+            this->shooter_on = true;
+        }else if (DoubleEqual(msg->data,0.0)){
+            this->shooter_on = false;
+        }else{
+            RCLCPP_WARN(this->get_logger(),"Received Negative settings!");
+            this->shooter_on = false;
+        }
+    }
+
+    void ShooterController::trigger_callback(std_msgs::msg::Float64::SharedPtr msg) {
+        if(msg->data > 0){
+            this->trigger_wheel_pid_target = msg->data;
+            this->trigger_on = true;
+        }else if (DoubleEqual(msg->data,0.0)){
+            this->trigger_on = false;
+        }else{
+            RCLCPP_WARN(this->get_logger(),"Received Negative settings!");
+            this->trigger_on = false;
+        }
+    }
+
+    void ShooterController::diag_callback(diagnostic_msgs::msg::DiagnosticArray::SharedPtr msg) {
+        for (const auto& status:msg->status) {
+            if (status.level == status.ERROR){
+                for (const auto &name: diag_names) {
+                    if(name == status.name){
+                        if(!motor_offline){
+                            RCLCPP_ERROR(this->get_logger(), "[%s] on status ERROR!",name.c_str());
+                        }
+                        motor_offline = true;
+                        return;
+                    }
+                }
+            }
+        }
+        motor_offline = false;
+    }
+
 }
 
 
