@@ -68,7 +68,7 @@ namespace gary_shoot{
         bool trigger_on;
         bool motor_offline;
 
-        std::vector<std::string> diag_names;
+        std::map<std::string,bool> diag_objs;
     };
 
 }

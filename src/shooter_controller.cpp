@@ -23,7 +23,7 @@ namespace gary_shoot{
         this->declare_parameter("left_shooter_wheel_diag_name", "fric_left");
         this->declare_parameter("right_shooter_wheel_diag_name", "fric_right");
         this->declare_parameter("trigger_wheel_diag_name", "trigger");
-        this->declare_parameter("diagnostic_topic", "/diagnostics");
+        this->declare_parameter("diagnostic_topic", "/diagnostics_agg");
 
         this->shooter_wheel_receive_topic = "/shooter_wheel_controller_pid_set";
         this->trigger_wheel_receive_topic = "/trigger_wheel_controller_pid_set";
@@ -33,7 +33,7 @@ namespace gary_shoot{
         this->trigger_wheel_send_topic = "/trigger_pid/cmd";
         this->trigger_wheel_pid_target = static_cast<double>(0.0f);
 
-        this->diagnostic_topic = "/diagnostics";
+        this->diagnostic_topic = "/diagnostics_agg";
         this->motor_offline = true;
 
         this->update_freq = 100.0f;
@@ -42,7 +42,7 @@ namespace gary_shoot{
         this->shooter_wheel_pid_current_set = static_cast<double>(0.0f);
         this->trigger_wheel_current_set = static_cast<double>(0.0f);
 
-        diag_names.clear();
+        diag_objs.clear();
 
     }
 
@@ -116,9 +116,9 @@ namespace gary_shoot{
                                         std::bind(&ShooterController::diag_callback,this,std::placeholders::_1));
 
 
-        diag_names.emplace_back(this->get_parameter("trigger_wheel_diag_name").as_string());
-        diag_names.emplace_back(this->get_parameter("left_shooter_wheel_diag_name").as_string());
-        diag_names.emplace_back(this->get_parameter("right_shooter_wheel_diag_name").as_string());
+        diag_objs.emplace(this->get_parameter("trigger_wheel_diag_name").as_string(),false);
+        diag_objs.emplace(this->get_parameter("left_shooter_wheel_diag_name").as_string(),false);
+        diag_objs.emplace(this->get_parameter("right_shooter_wheel_diag_name").as_string(),false);
 
         RCLCPP_INFO(this->get_logger(), "configured");
         return CallbackReturn::SUCCESS;
@@ -134,7 +134,7 @@ namespace gary_shoot{
         TriggerSubscription.reset();
         ShooterSubscription.reset();
 
-        diag_names.clear();
+        diag_objs.clear();
 
         RCLCPP_INFO(this->get_logger(), "cleaned up");
         return CallbackReturn::SUCCESS;
@@ -175,7 +175,7 @@ namespace gary_shoot{
         if(TriggerSubscription.get() != nullptr) TriggerSubscription.reset();
         if(ShooterSubscription.get() != nullptr) ShooterSubscription.reset();
 
-        diag_names.clear();
+        diag_objs.clear();
 
         RCLCPP_INFO(this->get_logger(), "shutdown");
         return CallbackReturn::SUCCESS;
@@ -191,7 +191,7 @@ namespace gary_shoot{
         if(TriggerSubscription.get() != nullptr) TriggerSubscription.reset();
         if(ShooterSubscription.get() != nullptr) ShooterSubscription.reset();
 
-        diag_names.clear();
+        diag_objs.clear();
 
         RCLCPP_ERROR(this->get_logger(), "Error happened");
         return CallbackReturn::SUCCESS;
@@ -214,6 +214,9 @@ namespace gary_shoot{
                 }
             } else {
                 this->shooter_wheel_pid_current_set = static_cast<double>(0.0f);
+            }
+            if(offline_warned){
+                RCLCPP_INFO(this->get_logger(), "Motor reconnected");
             }
             offline_warned = false;
         }else{
@@ -262,20 +265,28 @@ namespace gary_shoot{
     }
 
     void ShooterController::diag_callback(diagnostic_msgs::msg::DiagnosticArray::SharedPtr msg) {
+        for (auto &i : diag_objs) {
+            i.second = false;
+        }
         for (const auto& status:msg->status) {
-            if (status.level == status.ERROR){
-                for (const auto &name: diag_names) {
-                    if(name == status.name){
-                        if(!motor_offline){
-                            RCLCPP_ERROR(this->get_logger(), "[%s] on status ERROR!",name.c_str());
-                        }
-                        motor_offline = true;
-                        return;
+            if (status.level != status.OK){
+                if(diag_objs.find(status.name) != diag_objs.end()){
+                    if(!motor_offline){
+                        RCLCPP_ERROR(this->get_logger(), "[%s] on status ERROR!",status.name.c_str());
                     }
+                    diag_objs[status.name] = false;
+                }
+            } else {
+                if (diag_objs.find(status.name) != diag_objs.end()){
+                    diag_objs[status.name] = true;
                 }
             }
         }
-        motor_offline = false;
+        bool online = true;
+        for (const auto &i : diag_objs) {
+            online &= i.second;
+        }
+        motor_offline = !online;
     }
 
 }
