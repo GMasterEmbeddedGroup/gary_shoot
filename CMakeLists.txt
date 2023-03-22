@@ -22,14 +22,21 @@ find_package(rclcpp_components REQUIRED)
 find_package(rclcpp_lifecycle REQUIRED)
 find_package(lifecycle_msgs REQUIRED)
 find_package(gary_msgs REQUIRED)
+find_package(diagnostic_msgs REQUIRED)
 # uncomment the following section in order to fill in
 # further dependencies manually.
 # find_package(<dependency> REQUIRED)
 
 add_executable(shooter_controller
         src/shooter_controller.cpp)
+add_executable(dr16_forwarder
+        src/dr16_forwarder.cpp)
+add_executable(heat_controller
+        src/heat_controller.cpp)
 
 target_include_directories(shooter_controller PRIVATE include)
+target_include_directories(dr16_forwarder PRIVATE include)
+target_include_directories(heat_controller PRIVATE include)
 
 ament_target_dependencies(
         shooter_controller
@@ -38,13 +45,38 @@ ament_target_dependencies(
         rclcpp_lifecycle
         lifecycle_msgs
         gary_msgs
+        diagnostic_msgs
+)
+ament_target_dependencies(
+        dr16_forwarder
+        rclcpp
+        rclcpp_components
+        rclcpp_lifecycle
+        lifecycle_msgs
+        gary_msgs
+        diagnostic_msgs
+)
+ament_target_dependencies(
+        heat_controller
+        rclcpp
+        rclcpp_components
+        rclcpp_lifecycle
+        lifecycle_msgs
+        gary_msgs
+        diagnostic_msgs
 )
 
 
 add_library(shooter_controller_lib SHARED
         src/shooter_controller.cpp)
+add_library(dr16_forwarder_lib SHARED
+        src/dr16_forwarder.cpp)
+add_library(heat_controller_lib SHARED
+        src/heat_controller.cpp)
 
 target_include_directories(shooter_controller_lib PRIVATE include)
+target_include_directories(dr16_forwarder_lib PRIVATE include)
+target_include_directories(heat_controller_lib PRIVATE include)
 
 ament_target_dependencies(
         shooter_controller_lib
@@ -53,9 +85,30 @@ ament_target_dependencies(
         rclcpp_lifecycle
         lifecycle_msgs
         gary_msgs
+        diagnostic_msgs
+)
+ament_target_dependencies(
+        dr16_forwarder_lib
+        rclcpp
+        rclcpp_components
+        rclcpp_lifecycle
+        lifecycle_msgs
+        gary_msgs
+        diagnostic_msgs
+)
+ament_target_dependencies(
+        heat_controller_lib
+        rclcpp
+        rclcpp_components
+        rclcpp_lifecycle
+        lifecycle_msgs
+        gary_msgs
+        diagnostic_msgs
 )
 
 rclcpp_components_register_nodes(shooter_controller_lib "gary_shoot::ShooterController")
+rclcpp_components_register_nodes(dr16_forwarder_lib "gary_shoot::DR16Forwarder")
+rclcpp_components_register_nodes(heat_controller_lib "gary_shoot::HeatController")
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
@@ -71,8 +124,22 @@ endif()
 install(TARGETS shooter_controller
         DESTINATION lib/${PROJECT_NAME}
         )
+install(TARGETS dr16_forwarder
+        DESTINATION lib/${PROJECT_NAME}
+        )
+install(TARGETS heat_controller
+        DESTINATION lib/${PROJECT_NAME}
+        )
 
 install(TARGETS shooter_controller_lib
+        ARCHIVE DESTINATION lib
+        LIBRARY DESTINATION lib
+        RUNTIME DESTINATION bin)
+install(TARGETS dr16_forwarder_lib
+        ARCHIVE DESTINATION lib
+        LIBRARY DESTINATION lib
+        RUNTIME DESTINATION bin)
+install(TARGETS heat_controller_lib
         ARCHIVE DESTINATION lib
         LIBRARY DESTINATION lib
         RUNTIME DESTINATION bin)
@@ -83,6 +150,7 @@ ament_export_dependencies(
         rclcpp_lifecycle
         lifecycle_msgs
         gary_msgs
+        diagnostic_msgs
 )
 
 ament_package()
