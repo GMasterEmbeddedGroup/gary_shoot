@@ -241,25 +241,19 @@ namespace gary_shoot{
     }
 
     void ShooterController::shooter_callback(std_msgs::msg::Float64::SharedPtr msg) {
-        if(msg->data > 0){
+        if(!DoubleEqual(msg->data,0.0)){
             this->shooter_wheel_pid_target = msg->data;
             this->shooter_on = true;
         }else if (DoubleEqual(msg->data,0.0)){
-            this->shooter_on = false;
-        }else{
-            RCLCPP_WARN(this->get_logger(),"Received Negative settings!");
             this->shooter_on = false;
         }
     }
 
     void ShooterController::trigger_callback(std_msgs::msg::Float64::SharedPtr msg) {
-        if(msg->data > 0){
+        if(!DoubleEqual(msg->data,0.0)){
             this->trigger_wheel_pid_target = msg->data;
             this->trigger_on = true;
         }else if (DoubleEqual(msg->data,0.0)){
-            this->trigger_on = false;
-        }else{
-            RCLCPP_WARN(this->get_logger(),"Received Negative settings!");
             this->trigger_on = false;
         }
     }
