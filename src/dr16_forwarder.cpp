@@ -47,13 +47,13 @@ namespace gary_shoot{
             RCLCPP_ERROR(this->get_logger(), "TYPE ERROR: \"shooter_wheel_pid_target\" must be double.");
             return CallbackReturn::FAILURE;
         }
-        shooter_wheel_pid_target = abs(this->get_parameter("shooter_wheel_pid_target").as_double());
+        shooter_wheel_pid_target =this->get_parameter("shooter_wheel_pid_target").as_double();
 
         if(this->get_parameter("trigger_wheel_pid_target").get_type() != rclcpp::PARAMETER_DOUBLE){
             RCLCPP_ERROR(this->get_logger(), "TYPE ERROR: \"trigger_wheel_pid_target\" must be double.");
             return CallbackReturn::FAILURE;
         }
-        trigger_wheel_pid_target = abs(this->get_parameter("trigger_wheel_pid_target").as_double());
+        trigger_wheel_pid_target =this->get_parameter("trigger_wheel_pid_target").as_double();
 
 
         if(this->get_parameter("shooter_wheel_topic").get_type() != rclcpp::PARAMETER_STRING){
