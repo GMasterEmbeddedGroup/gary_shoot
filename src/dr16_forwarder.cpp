@@ -92,10 +92,10 @@ namespace gary_shoot{
     CallbackReturn DR16Forwarder::on_cleanup(const rclcpp_lifecycle::State &previous_state) {
         RCL_UNUSED(previous_state);
 
-        timer_update->reset();
-        TriggerWheelOnPublisher.reset();
-        ShooterWheelOnPublisher.reset();
-        RemoteControlSubscription.reset();
+        if(timer_update.get()!=nullptr) timer_update->reset();
+        if(TriggerWheelOnPublisher.get() != nullptr) TriggerWheelOnPublisher.reset();
+        if(ShooterWheelOnPublisher.get() != nullptr) ShooterWheelOnPublisher.reset();
+        if(RemoteControlSubscription.get() != nullptr) RemoteControlSubscription.reset();
 
         RCLCPP_INFO(this->get_logger(), "cleaned up");
         return CallbackReturn::SUCCESS;

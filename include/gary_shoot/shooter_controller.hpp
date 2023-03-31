@@ -8,6 +8,7 @@
 #include <chrono>
 #include <limits>
 
+
 static inline bool DoubleEqual(double a, double b)
 {
     return std::abs(a - b) < std::numeric_limits<double>::epsilon();
@@ -15,6 +16,10 @@ static inline bool DoubleEqual(double a, double b)
 
 namespace gary_shoot{
     using CallbackReturn = rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn;
+
+    constexpr int BLOCK_TIME = 700;
+    constexpr int REVERSE_TIME = 500;
+    constexpr double REVERSE_SPEED_LIMIT = 13.0;
 
     class ShooterController : public rclcpp_lifecycle::LifecycleNode {
 
@@ -67,6 +72,10 @@ namespace gary_shoot{
         bool shooter_on;
         bool trigger_on;
         bool motor_offline;
+        bool zero_force;
+
+        uint8_t reverse_time;
+        uint8_t block_time;
 
         std::map<std::string,bool> diag_objs;
     };

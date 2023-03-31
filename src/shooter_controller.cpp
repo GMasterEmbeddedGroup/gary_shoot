@@ -42,6 +42,7 @@ namespace gary_shoot{
         this->shooter_wheel_pid_current_set = static_cast<double>(0.0f);
         this->trigger_wheel_current_set = static_cast<double>(0.0f);
 
+
         diag_objs.clear();
 
     }
@@ -127,12 +128,12 @@ namespace gary_shoot{
     CallbackReturn ShooterController::on_cleanup(const rclcpp_lifecycle::State &previous_state) {
         RCL_UNUSED(previous_state);
 
-        timer_update->reset();
-        TriggerWheelPIDPublisher.reset();
-        RightShooterWheelPIDPublisher.reset();
-        LeftShooterWheelPIDPublisher.reset();
-        TriggerSubscription.reset();
-        ShooterSubscription.reset();
+        if(timer_update.get()!=nullptr) timer_update->reset();
+        if(TriggerWheelPIDPublisher.get() != nullptr) TriggerWheelPIDPublisher.reset();
+        if(RightShooterWheelPIDPublisher.get() != nullptr) RightShooterWheelPIDPublisher.reset();
+        if(LeftShooterWheelPIDPublisher.get() != nullptr) LeftShooterWheelPIDPublisher.reset();
+        if(TriggerSubscription.get() != nullptr) TriggerSubscription.reset();
+        if(ShooterSubscription.get() != nullptr) ShooterSubscription.reset();
 
         diag_objs.clear();
 
