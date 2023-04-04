@@ -3,6 +3,7 @@
 #include "rclcpp_lifecycle/lifecycle_node.hpp"
 #include "std_msgs/msg/float64.hpp"
 #include "diagnostic_msgs/msg/diagnostic_array.hpp"
+#include "gary_msgs/msg/pid.hpp"
 #include <string>
 #include <cmath>
 #include <chrono>
@@ -19,7 +20,6 @@ namespace gary_shoot{
 
     constexpr int BLOCK_TIME = 700;
     constexpr int REVERSE_TIME = 500;
-    constexpr double REVERSE_SPEED_LIMIT = 13.0;
 
     class ShooterController : public rclcpp_lifecycle::LifecycleNode {
 
@@ -49,11 +49,15 @@ namespace gary_shoot{
         rclcpp::Subscription<std_msgs::msg::Float64>::SharedPtr TriggerSubscription;
         void diag_callback(diagnostic_msgs::msg::DiagnosticArray::SharedPtr msg);
         rclcpp::Subscription<diagnostic_msgs::msg::DiagnosticArray>::SharedPtr DiagnosticSubscription;
+        void pid_callback(gary_msgs::msg::PID::SharedPtr msg);
+        rclcpp::Subscription<gary_msgs::msg::PID>::SharedPtr TriggerPIDSubscription;
 
         void data_publisher();
+        void reverse_trigger();
 
         //timer
         rclcpp::TimerBase::SharedPtr timer_update;
+        rclcpp::TimerBase::SharedPtr timer_reverse;
 
         double update_freq;
 
@@ -69,13 +73,20 @@ namespace gary_shoot{
         double trigger_wheel_pid_target;
         double trigger_wheel_current_set;
 
+        std::string pid_topic;
+
         bool shooter_on;
         bool trigger_on;
         bool motor_offline;
         bool zero_force;
 
-        uint8_t reverse_time;
-        uint8_t block_time;
+        int reverse_time;
+        int block_time;
+        bool single_shoot;
+        bool reverse;
+        double reverse_pid_set;
+        double real_trigger_speed;
+        uint8_t BLOCK_TRIGGER_SPEED_DIFF;
 
         std::map<std::string,bool> diag_objs;
     };
