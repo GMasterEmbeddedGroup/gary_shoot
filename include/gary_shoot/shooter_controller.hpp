@@ -18,8 +18,8 @@ static inline bool DoubleEqual(double a, double b)
 namespace gary_shoot{
     using CallbackReturn = rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn;
 
-    constexpr int BLOCK_TIME = 700;
-    constexpr int REVERSE_TIME = 500;
+    constexpr int BLOCK_TIME = 500;
+    constexpr int REVERSE_TIME = 700;
 
     class ShooterController : public rclcpp_lifecycle::LifecycleNode {
 
