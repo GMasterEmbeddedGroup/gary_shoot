@@ -223,6 +223,7 @@ namespace gary_shoot{
     }
 
     void ShooterController::data_publisher() {
+        static uint8_t zero_force_time_cnt = 0;
         static bool offline_warned = false;
         if(!motor_offline){
             if (this->trigger_on && this->shooter_on) {
@@ -260,10 +261,19 @@ namespace gary_shoot{
         RCLCPP_DEBUG_THROTTLE(this->get_logger(), clock, 500, "L:%lf, R:%lf, P:%lf",this->LeftShooterWheelPIDMsg.data,
                      this->RightShooterWheelPIDMsg.data,this->TriggerWheelPIDMsg.data);
 
-        LeftShooterWheelPIDPublisher->publish(LeftShooterWheelPIDMsg);
-        RightShooterWheelPIDPublisher->publish(RightShooterWheelPIDMsg);
-        TriggerWheelPIDPublisher->publish(TriggerWheelPIDMsg);
+        if(!(this->trigger_on || this->shooter_on)){
+            if(zero_force_time_cnt < 20) { zero_force_time_cnt++; }
+            else { zero_force = true; }
+        }else{
+            zero_force = false;
+            zero_force_time_cnt = 0;
+        }
 
+        if(!zero_force) {
+            LeftShooterWheelPIDPublisher->publish(LeftShooterWheelPIDMsg);
+            RightShooterWheelPIDPublisher->publish(RightShooterWheelPIDMsg);
+            TriggerWheelPIDPublisher->publish(TriggerWheelPIDMsg);
+        }
         real_trigger_speed = trigger_wheel_current_set;
     }
 
