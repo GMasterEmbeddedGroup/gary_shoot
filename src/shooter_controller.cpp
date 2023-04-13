@@ -58,78 +58,54 @@ namespace gary_shoot {
     CallbackReturn ShooterController::on_configure(const rclcpp_lifecycle::State &previous_state) {
         RCL_UNUSED(previous_state);
 
-        if (this->get_parameter("update_freq").get_type() != rclcpp::PARAMETER_DOUBLE) {
-            RCLCPP_ERROR(this->get_logger(), "update_freq type must be double");
-            return CallbackReturn::FAILURE;
-        }
+        //create callback group
+        this->cb_group = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
+        rclcpp::SubscriptionOptions sub_options;
+        sub_options.callback_group = cb_group;
+
         this->update_freq = this->get_parameter("update_freq").as_double();
 
-        if (this->get_parameter("left_shooter_wheel_send_topic").get_type() != rclcpp::PARAMETER_STRING) {
-            RCLCPP_ERROR(this->get_logger(), "TYPE ERROR: \"left_shooter_wheel_send_topic\" must be a string.");
-            return CallbackReturn::FAILURE;
-        }
         left_wheel_send_topic = this->get_parameter("left_shooter_wheel_send_topic").as_string();
         LeftShooterWheelPIDPublisher =
                 create_publisher<std_msgs::msg::Float64>(left_wheel_send_topic, rclcpp::SystemDefaultsQoS());
 
-        if (this->get_parameter("right_shooter_wheel_send_topic").get_type() != rclcpp::PARAMETER_STRING) {
-            RCLCPP_ERROR(this->get_logger(), "TYPE ERROR: \"right_shooter_wheel_send_topic\" must be a string.");
-            return CallbackReturn::FAILURE;
-        }
         right_wheel_send_topic = this->get_parameter("right_shooter_wheel_send_topic").as_string();
         RightShooterWheelPIDPublisher =
                 create_publisher<std_msgs::msg::Float64>(right_wheel_send_topic, rclcpp::SystemDefaultsQoS());
 
-        if (this->get_parameter("trigger_wheel_send_topic").get_type() != rclcpp::PARAMETER_STRING) {
-            RCLCPP_ERROR(this->get_logger(), "TYPE ERROR: \"trigger_wheel_send_topic\" must be a string.");
-            return CallbackReturn::FAILURE;
-        }
         trigger_wheel_send_topic = this->get_parameter("trigger_wheel_send_topic").as_string();
         TriggerWheelPIDPublisher =
                 create_publisher<std_msgs::msg::Float64>(trigger_wheel_send_topic, rclcpp::SystemDefaultsQoS());
 
 
-        if (this->get_parameter("shooter_wheel_receive_topic").get_type() != rclcpp::PARAMETER_STRING) {
-            RCLCPP_ERROR(this->get_logger(), "TYPE ERROR: \"shooter_wheel_receive_topic\" must be a string.");
-            return CallbackReturn::FAILURE;
-        }
         shooter_wheel_receive_topic = this->get_parameter("shooter_wheel_receive_topic").as_string();
         this->ShooterSubscription =
                 this->create_subscription<std_msgs::msg::Float64>(
                         shooter_wheel_receive_topic,
                         rclcpp::SystemDefaultsQoS(),
-                        std::bind(&ShooterController::shooter_callback, this, std::placeholders::_1));
+                        std::bind(&ShooterController::shooter_callback, this, std::placeholders::_1), sub_options);
 
 
-        if (this->get_parameter("trigger_wheel_receive_topic").get_type() != rclcpp::PARAMETER_STRING) {
-            RCLCPP_ERROR(this->get_logger(), "TYPE ERROR: \"trigger_wheel_receive_topic\" must be a string.");
-            return CallbackReturn::FAILURE;
-        }
         trigger_wheel_receive_topic = this->get_parameter("trigger_wheel_receive_topic").as_string();
         this->TriggerSubscription =
                 this->create_subscription<std_msgs::msg::Float64>(
                         trigger_wheel_receive_topic,
                         rclcpp::SystemDefaultsQoS(),
-                        std::bind(&ShooterController::trigger_callback, this, std::placeholders::_1));
+                        std::bind(&ShooterController::trigger_callback, this, std::placeholders::_1), sub_options);
 
-
-        if (this->get_parameter("diagnostic_topic").get_type() != rclcpp::PARAMETER_STRING) {
-            RCLCPP_ERROR(this->get_logger(), "TYPE ERROR: \"diagnostic_topic\" must be a string.");
-            return CallbackReturn::FAILURE;
-        }
         diagnostic_topic = this->get_parameter("diagnostic_topic").as_string();
         this->DiagnosticSubscription =
                 this->create_subscription<diagnostic_msgs::msg::DiagnosticArray>(
                         diagnostic_topic,
                         rclcpp::SystemDefaultsQoS(),
-                        std::bind(&ShooterController::diag_callback, this, std::placeholders::_1));
+                        std::bind(&ShooterController::diag_callback, this, std::placeholders::_1), sub_options);
 
         pid_topic = this->get_parameter("pid_topic").as_string();
         this->TriggerPIDSubscription =
                 this->create_subscription<gary_msgs::msg::PID>(
                         pid_topic,
                         rclcpp::SystemDefaultsQoS(),
-                        std::bind(&ShooterController::pid_callback, this, std::placeholders::_1));
+                        std::bind(&ShooterController::pid_callback, this, std::placeholders::_1), sub_options);
 
         reverse_pid_set = this->get_parameter("reverse_pid_set").as_double();
         diag_objs.emplace(this->get_parameter("trigger_wheel_diag_name").as_string(), false);
@@ -161,8 +137,8 @@ namespace gary_shoot {
     CallbackReturn ShooterController::on_activate(const rclcpp_lifecycle::State &previous_state) {
         RCL_UNUSED(previous_state);
         using namespace std::chrono_literals;
-        timer_update = this->create_wall_timer(1000ms / this->update_freq, [this] { data_publisher(); });
-        timer_reverse = this->create_wall_timer(1000ms / 1000.0, [this] { reverse_trigger(); });
+        timer_update = this->create_wall_timer(1000ms / this->update_freq, [this] { data_publisher(); }, this->cb_group);
+        timer_reverse = this->create_wall_timer(1000ms / 1000.0, [this] { reverse_trigger(); }, this->cb_group);
         TriggerWheelPIDPublisher->on_activate();
         RightShooterWheelPIDPublisher->on_activate();
         LeftShooterWheelPIDPublisher->on_activate();

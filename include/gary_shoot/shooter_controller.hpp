@@ -18,8 +18,8 @@ static inline bool DoubleEqual(double a, double b)
 namespace gary_shoot{
     using CallbackReturn = rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn;
 
-    constexpr int BLOCK_TIME = 500;
-    constexpr int REVERSE_TIME = 700;
+    constexpr int BLOCK_TIME = 1000;
+    constexpr int REVERSE_TIME = 1000;
 
     class ShooterController : public rclcpp_lifecycle::LifecycleNode {
 
@@ -35,6 +35,9 @@ namespace gary_shoot{
         CallbackReturn on_deactivate(const rclcpp_lifecycle::State & previous_state) override;
         CallbackReturn on_shutdown(const rclcpp_lifecycle::State & previous_state) override;
         CallbackReturn on_error(const rclcpp_lifecycle::State & previous_state) override;
+
+        //callback group
+        rclcpp::CallbackGroup::SharedPtr cb_group;
 
         std_msgs::msg::Float64 LeftShooterWheelPIDMsg;
         rclcpp_lifecycle::LifecyclePublisher<std_msgs::msg::Float64>::SharedPtr LeftShooterWheelPIDPublisher;

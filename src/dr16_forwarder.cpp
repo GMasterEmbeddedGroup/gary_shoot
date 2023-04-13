@@ -36,53 +36,32 @@ namespace gary_shoot{
     CallbackReturn DR16Forwarder::on_configure(const rclcpp_lifecycle::State &previous_state) {
         RCL_UNUSED(previous_state);
 
-        if (this->get_parameter("update_freq").get_type() != rclcpp::PARAMETER_DOUBLE) {
-            RCLCPP_ERROR(this->get_logger(), "update_freq type must be double");
-            return CallbackReturn::FAILURE;
-        }
+        //create callback group
+        this->cb_group = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
+        rclcpp::SubscriptionOptions sub_options;
+        sub_options.callback_group = cb_group;
+
         this->update_freq = this->get_parameter("update_freq").as_double();
 
+        this->shooter_wheel_pid_target =this->get_parameter("shooter_wheel_pid_target").as_double();
 
-        if(this->get_parameter("shooter_wheel_pid_target").get_type() != rclcpp::PARAMETER_DOUBLE){
-            RCLCPP_ERROR(this->get_logger(), "TYPE ERROR: \"shooter_wheel_pid_target\" must be double.");
-            return CallbackReturn::FAILURE;
-        }
-        shooter_wheel_pid_target =this->get_parameter("shooter_wheel_pid_target").as_double();
+        this->trigger_wheel_pid_target =this->get_parameter("trigger_wheel_pid_target").as_double();
 
-        if(this->get_parameter("trigger_wheel_pid_target").get_type() != rclcpp::PARAMETER_DOUBLE){
-            RCLCPP_ERROR(this->get_logger(), "TYPE ERROR: \"trigger_wheel_pid_target\" must be double.");
-            return CallbackReturn::FAILURE;
-        }
-        trigger_wheel_pid_target =this->get_parameter("trigger_wheel_pid_target").as_double();
-
-
-        if(this->get_parameter("shooter_wheel_topic").get_type() != rclcpp::PARAMETER_STRING){
-            RCLCPP_ERROR(this->get_logger(), "TYPE ERROR: \"shooter_wheel_topic\" must be a string.");
-            return CallbackReturn::FAILURE;
-        }
-        shooter_wheel_topic = this->get_parameter("shooter_wheel_topic").as_string();
+        this->shooter_wheel_topic = this->get_parameter("shooter_wheel_topic").as_string();
         ShooterWheelOnPublisher =
                 create_publisher<std_msgs::msg::Float64>(shooter_wheel_topic,rclcpp::SystemDefaultsQoS());
 
-        if(this->get_parameter("trigger_wheel_topic").get_type() != rclcpp::PARAMETER_STRING){
-            RCLCPP_ERROR(this->get_logger(), "TYPE ERROR: \"trigger_wheel_topic\" must be a string.");
-            return CallbackReturn::FAILURE;
-        }
         trigger_wheel_topic = this->get_parameter("trigger_wheel_topic").as_string();
         TriggerWheelOnPublisher =
                 create_publisher<std_msgs::msg::Float64>(trigger_wheel_topic,rclcpp::SystemDefaultsQoS());
 
 
-        if(this->get_parameter("remote_control_topic").get_type() != rclcpp::PARAMETER_STRING){
-            RCLCPP_ERROR(this->get_logger(), "TYPE ERROR: \"remote_control_topic\" must be a string.");
-            return CallbackReturn::FAILURE;
-        }
         remote_control_topic = this->get_parameter("remote_control_topic").as_string();
         this->RemoteControlSubscription =
                 this->create_subscription<gary_msgs::msg::DR16Receiver>(
                         remote_control_topic,
                         rclcpp::SystemDefaultsQoS(),
-                        std::bind(&DR16Forwarder::rc_callback,this,std::placeholders::_1));
+                        std::bind(&DR16Forwarder::rc_callback,this,std::placeholders::_1), sub_options);
 
 
         RCLCPP_INFO(this->get_logger(), "configured");
@@ -104,7 +83,7 @@ namespace gary_shoot{
     CallbackReturn DR16Forwarder::on_activate(const rclcpp_lifecycle::State &previous_state) {
         RCL_UNUSED(previous_state);
         using namespace std::chrono_literals;
-        timer_update = this->create_wall_timer(1000ms/this->update_freq,[this] { data_publisher(); });
+        timer_update = this->create_wall_timer(1000ms/this->update_freq,[this] { data_publisher(); }, this->cb_group);
         TriggerWheelOnPublisher->on_activate();
         ShooterWheelOnPublisher->on_activate();
         RCLCPP_INFO(this->get_logger(), "activated");

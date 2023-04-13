@@ -21,6 +21,9 @@ namespace gary_shoot{
         CallbackReturn on_shutdown(const rclcpp_lifecycle::State & previous_state) override;
         CallbackReturn on_error(const rclcpp_lifecycle::State & previous_state) override;
 
+        //callback group
+        rclcpp::CallbackGroup::SharedPtr cb_group;
+
         std_msgs::msg::Float64 ShooterWheelOnMsg;
         rclcpp_lifecycle::LifecyclePublisher<std_msgs::msg::Float64>::SharedPtr ShooterWheelOnPublisher;
         std_msgs::msg::Float64 TriggerWheelOnMsg;
