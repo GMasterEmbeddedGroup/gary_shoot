@@ -18,6 +18,7 @@ namespace gary_shoot{
         this->declare_parameter("trigger_wheel_topic", "/rc_trigger_pid_set");
         this->declare_parameter("shooter_wheel_pid_target", 8500.0f);
         this->declare_parameter("trigger_wheel_pid_target", 3000.0f);
+        this->declare_parameter("autoaim_topic", "/autoaim/target");
 
         this->remote_control_topic = "/remote_control";
 
@@ -31,6 +32,9 @@ namespace gary_shoot{
         this->prev_switch_state = 0;
         this->shooter_on = false;
         this->trigger_on = false;
+        switch_state = 0;
+        right_switch_state = 0;
+        trigger_wheel_pid_target_set = 0;
     }
 
     CallbackReturn DR16Forwarder::on_configure(const rclcpp_lifecycle::State &previous_state) {
@@ -63,6 +67,13 @@ namespace gary_shoot{
                         rclcpp::SystemDefaultsQoS(),
                         std::bind(&DR16Forwarder::rc_callback,this,std::placeholders::_1), sub_options);
 
+        //get autoaim_topic
+        this->autoaim_topic = this->get_parameter("autoaim_topic").as_string();
+        this->autoaim_sub = this->create_subscription<gary_msgs::msg::AutoAIM>(
+                this->autoaim_topic, rclcpp::SystemDefaultsQoS(),
+                std::bind(&DR16Forwarder::autoaim_callback, this, std::placeholders::_1));
+
+        trigger_wheel_pid_target_set = 0;
 
         RCLCPP_INFO(this->get_logger(), "configured");
         return CallbackReturn::SUCCESS;
@@ -128,7 +139,6 @@ namespace gary_shoot{
 
     void DR16Forwarder::rc_callback(gary_msgs::msg::DR16Receiver::SharedPtr msg) {
         // I know "msg" should be made const, but it somehow goes error, so do not change it.
-        std::uint8_t switch_state = 0;
         switch_state = msg->sw_left;
         if(prev_switch_state == msg->SW_MID) {
             if(switch_state == msg->SW_DOWN){
@@ -154,11 +164,16 @@ namespace gary_shoot{
             }
         }
         prev_switch_state = switch_state;
+        right_switch_state = msg->sw_right;
     }
 
     void DR16Forwarder::data_publisher() {
         if(this->trigger_on && this->shooter_on){
-            TriggerWheelOnMsg.data = this->trigger_wheel_pid_target;
+	    if(right_switch_state == gary_msgs::msg::DR16Receiver::SW_UP) {
+                TriggerWheelOnMsg.data = this->trigger_wheel_pid_target_set;
+	    }else{
+	        TriggerWheelOnMsg.data = this->trigger_wheel_pid_target;
+	    }
         }else{
             TriggerWheelOnMsg.data = static_cast<double>(0.0f);
         }
@@ -170,6 +185,42 @@ namespace gary_shoot{
 
         ShooterWheelOnPublisher->publish(ShooterWheelOnMsg);
         TriggerWheelOnPublisher->publish(TriggerWheelOnMsg);
+    }
+
+    void DR16Forwarder::autoaim_callback(gary_msgs::msg::AutoAIM::SharedPtr msg) {
+        auto trigger_set_k = 0.0;
+
+        //have target and use autoaim
+        if(right_switch_state == gary_msgs::msg::DR16Receiver::SW_UP) {
+            if (msg->target_id != gary_msgs::msg::AutoAIM::TARGET_ID0_NONE) {
+
+                const auto dis = msg->target_distance;
+                if(dis <= 1.0){
+                    trigger_set_k = 1;
+                }else if(dis >= 4.0){
+                    trigger_set_k = 0.4;
+                }else{
+                    trigger_set_k = (-0.2)*(dis - 1.0)+ 1;
+                }
+
+                trigger_wheel_pid_target_set = trigger_wheel_pid_target * trigger_set_k;
+
+                auto clock = rclcpp::Clock();
+                if (!trigger_on) {
+                    RCLCPP_INFO_THROTTLE(this->get_logger(), clock, 2000,
+                                         "Detected target id[%d], turning trigger on with trigger rpm[%lf] ...",
+                                         msg->target_id, trigger_wheel_pid_target_set);
+                    trigger_on = true;
+                }
+                if (!shooter_on) {
+                    trigger_on = false;
+                    RCLCPP_WARN_THROTTLE(this->get_logger(), clock, 2000,
+                                         "Trigger off!: cannot turn trigger on while shooter is off!");
+                }
+            } else {
+                trigger_on = false;
+            }
+        }
     }
 }
 

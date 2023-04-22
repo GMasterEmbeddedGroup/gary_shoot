@@ -3,6 +3,7 @@
 #include "rclcpp_lifecycle/lifecycle_node.hpp"
 #include "gary_msgs/msg/dr16_receiver.hpp"
 #include "std_msgs/msg/float64.hpp"
+#include "gary_msgs/msg/auto_aim.hpp"
 #include <string>
 namespace gary_shoot{
     using CallbackReturn = rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn;
@@ -33,6 +34,10 @@ namespace gary_shoot{
         void rc_callback(gary_msgs::msg::DR16Receiver::SharedPtr msg);
         rclcpp::Subscription<gary_msgs::msg::DR16Receiver>::SharedPtr RemoteControlSubscription;
 
+        void autoaim_callback(gary_msgs::msg::AutoAIM::SharedPtr msg);
+        rclcpp::Subscription<gary_msgs::msg::AutoAIM>::SharedPtr autoaim_sub;
+
+
         void data_publisher();
 
         //timer
@@ -42,10 +47,14 @@ namespace gary_shoot{
 
         double shooter_wheel_pid_target;
         double trigger_wheel_pid_target;
+        double trigger_wheel_pid_target_set;
         std::string remote_control_topic;
         std::string shooter_wheel_topic;
         std::string trigger_wheel_topic;
+        std::string autoaim_topic;
         std::uint8_t prev_switch_state;
+        std::uint8_t switch_state;
+        std::uint8_t right_switch_state;
         bool shooter_on;
         bool trigger_on;
     };

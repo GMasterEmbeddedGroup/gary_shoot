@@ -2,6 +2,8 @@
 #include "rclcpp_lifecycle/lifecycle_node.hpp"
 #include "gary_msgs/msg/dr16_receiver.hpp"
 #include "std_msgs/msg/float64.hpp"
+#include "gary_msgs/msg/robot_status.hpp"
+#include "gary_msgs/msg/power_heat.hpp"
 #include <string>
 #include <cmath>
 #include <chrono>
@@ -25,9 +27,6 @@ namespace gary_shoot{
         CallbackReturn on_shutdown(const rclcpp_lifecycle::State & previous_state) override;
         CallbackReturn on_error(const rclcpp_lifecycle::State & previous_state) override;
 
-        //callback group
-        rclcpp::CallbackGroup::SharedPtr cb_group;
-
         std_msgs::msg::Float64 LeftShooterWheelPIDMsg;
         rclcpp_lifecycle::LifecyclePublisher<std_msgs::msg::Float64>::SharedPtr LeftShooterWheelPIDPublisher;
         std_msgs::msg::Float64 RightShooterWheelPIDMsg;
@@ -35,8 +34,18 @@ namespace gary_shoot{
         std_msgs::msg::Float64 TriggerWheelPIDMsg;
         rclcpp_lifecycle::LifecyclePublisher<std_msgs::msg::Float64>::SharedPtr TriggerWheelPIDPublisher;
 
-        void rc_callback(gary_msgs::msg::DR16Receiver::SharedPtr msg);
-        rclcpp::Subscription<gary_msgs::msg::DR16Receiver>::SharedPtr RemoteControlSubscription;
+        void lf_callback(std_msgs::msg::Float64::SharedPtr msg);
+        rclcpp::Subscription<std_msgs::msg::Float64>::SharedPtr LeftShooterWheelPIDSubscription;
+        void rf_callback(std_msgs::msg::Float64::SharedPtr msg);
+        rclcpp::Subscription<std_msgs::msg::Float64>::SharedPtr RightShooterWheelPIDSubscription;
+        void tw_callback(std_msgs::msg::Float64::SharedPtr msg);
+        rclcpp::Subscription<std_msgs::msg::Float64>::SharedPtr TriggerWheelPIDSubscription;
+
+        void cool_callback(gary_msgs::msg::RobotStatus::SharedPtr msg);
+        rclcpp::Subscription<gary_msgs::msg::RobotStatus>::SharedPtr RobotStatusSubscription;
+        void heat_callback(gary_msgs::msg::PowerHeat::SharedPtr msg);
+        rclcpp::Subscription<gary_msgs::msg::PowerHeat>::SharedPtr PowerHeatSubscription;
+
 
         void data_publisher();
 
@@ -87,36 +96,54 @@ namespace gary_shoot{
     CallbackReturn HeatController::on_configure(const rclcpp_lifecycle::State &previous_state) {
         RCL_UNUSED(previous_state);
 
-        //create callback group
-        this->cb_group = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
-        rclcpp::SubscriptionOptions sub_options;
-        sub_options.callback_group = cb_group;
-
+        if (this->get_parameter("update_freq").get_type() != rclcpp::PARAMETER_DOUBLE) {
+            RCLCPP_ERROR(this->get_logger(), "update_freq type must be double");
+            return CallbackReturn::FAILURE;
+        }
         this->update_freq = this->get_parameter("update_freq").as_double();
 
+        if(this->get_parameter("left_shooter_wheel_topic").get_type() != rclcpp::PARAMETER_STRING){
+            RCLCPP_ERROR(this->get_logger(), "TYPE ERROR: \"left_shooter_wheel_topic\" must be a string.");
+            return CallbackReturn::FAILURE;
+        }
         left_wheel_topic = this->get_parameter("left_shooter_wheel_topic").as_string();
         LeftShooterWheelPIDPublisher =
                 create_publisher<std_msgs::msg::Float64>(left_wheel_topic,rclcpp::SystemDefaultsQoS());
 
+        if(this->get_parameter("right_shooter_wheel_topic").get_type() != rclcpp::PARAMETER_STRING){
+            RCLCPP_ERROR(this->get_logger(), "TYPE ERROR: \"right_shooter_wheel_topic\" must be a string.");
+            return CallbackReturn::FAILURE;
+        }
         right_wheel_topic = this->get_parameter("right_shooter_wheel_topic").as_string();
         RightShooterWheelPIDPublisher =
                 create_publisher<std_msgs::msg::Float64>(right_wheel_topic,rclcpp::SystemDefaultsQoS());
 
+        if(this->get_parameter("trigger_wheel_topic").get_type() != rclcpp::PARAMETER_STRING){
+            RCLCPP_ERROR(this->get_logger(), "TYPE ERROR: \"trigger_wheel_topic\" must be a string.");
+            return CallbackReturn::FAILURE;
+        }
         trigger_wheel_topic = this->get_parameter("trigger_wheel_topic").as_string();
         TriggerWheelPIDPublisher =
                 create_publisher<std_msgs::msg::Float64>(trigger_wheel_topic,rclcpp::SystemDefaultsQoS());
 
+        if(this->get_parameter("shooter_wheel_pid_target").get_type() != rclcpp::PARAMETER_DOUBLE){
+            RCLCPP_ERROR(this->get_logger(), "TYPE ERROR: \"shooter_wheel_pid_target\" must be double.");
+            return CallbackReturn::FAILURE;
+        }
         shooter_wheel_pid_target = abs(this->get_parameter("shooter_wheel_pid_target").as_double());
 
+        if(this->get_parameter("trigger_wheel_pid_target").get_type() != rclcpp::PARAMETER_DOUBLE){
+            RCLCPP_ERROR(this->get_logger(), "TYPE ERROR: \"trigger_wheel_pid_target\" must be double.");
+            return CallbackReturn::FAILURE;
+        }
         trigger_wheel_pid_target = abs(this->get_parameter("trigger_wheel_pid_target").as_double());
 
+        if(this->get_parameter("remote_control_topic").get_type() != rclcpp::PARAMETER_STRING){
+            RCLCPP_ERROR(this->get_logger(), "TYPE ERROR: \"remote_control_topic\" must be a string.");
+            return CallbackReturn::FAILURE;
+        }
         remote_control_topic = this->get_parameter("remote_control_topic").as_string();
 
-        this->RemoteControlSubscription =
-                this->create_subscription<gary_msgs::msg::DR16Receiver>(
-                        remote_control_topic,
-                        rclcpp::SystemDefaultsQoS(),
-                        std::bind(&HeatController::rc_callback,this,std::placeholders::_1), sub_options);
 
         RCLCPP_INFO(this->get_logger(), "configured");
         return CallbackReturn::SUCCESS;
@@ -129,7 +156,6 @@ namespace gary_shoot{
         TriggerWheelPIDPublisher.reset();
         RightShooterWheelPIDPublisher.reset();
         LeftShooterWheelPIDPublisher.reset();
-        RemoteControlSubscription.reset();
 
         RCLCPP_INFO(this->get_logger(), "cleaned up");
         return CallbackReturn::SUCCESS;
@@ -138,7 +164,7 @@ namespace gary_shoot{
     CallbackReturn HeatController::on_activate(const rclcpp_lifecycle::State &previous_state) {
         RCL_UNUSED(previous_state);
         using namespace std::chrono_literals;
-        timer_update = this->create_wall_timer(1000ms/this->update_freq,[this] { data_publisher(); }, this->cb_group);
+        timer_update = this->create_wall_timer(1000ms/this->update_freq,[this] { data_publisher(); });
         TriggerWheelPIDPublisher->on_activate();
         RightShooterWheelPIDPublisher->on_activate();
         LeftShooterWheelPIDPublisher->on_activate();
@@ -153,7 +179,6 @@ namespace gary_shoot{
         TriggerWheelPIDPublisher->on_deactivate();
         RightShooterWheelPIDPublisher->on_deactivate();
         LeftShooterWheelPIDPublisher->on_deactivate();
-        RemoteControlSubscription.reset();
 
         RCLCPP_INFO(this->get_logger(), "deactivated");
         return CallbackReturn::SUCCESS;
@@ -166,7 +191,6 @@ namespace gary_shoot{
         if(TriggerWheelPIDPublisher.get() != nullptr) TriggerWheelPIDPublisher.reset();
         if(RightShooterWheelPIDPublisher.get() != nullptr) RightShooterWheelPIDPublisher.reset();
         if(LeftShooterWheelPIDPublisher.get() != nullptr) LeftShooterWheelPIDPublisher.reset();
-        if(RemoteControlSubscription.get() != nullptr) RemoteControlSubscription.reset();
 
         RCLCPP_INFO(this->get_logger(), "shutdown");
         return CallbackReturn::SUCCESS;
@@ -179,40 +203,11 @@ namespace gary_shoot{
         if(TriggerWheelPIDPublisher.get() != nullptr) TriggerWheelPIDPublisher.reset();
         if(RightShooterWheelPIDPublisher.get() != nullptr) RightShooterWheelPIDPublisher.reset();
         if(LeftShooterWheelPIDPublisher.get() != nullptr) LeftShooterWheelPIDPublisher.reset();
-        if(RemoteControlSubscription.get() != nullptr) RemoteControlSubscription.reset();
 
         RCLCPP_ERROR(this->get_logger(), "Error happened");
         return CallbackReturn::SUCCESS;
     }
 
-    void HeatController::rc_callback(gary_msgs::msg::DR16Receiver::SharedPtr msg) {
-        std::uint8_t switch_state = 0;
-        switch_state = msg->sw_left;
-        if(prev_switch_state == msg->SW_MID) {
-            if(switch_state == msg->SW_DOWN){
-                trigger_on = !trigger_on;
-                RCLCPP_INFO(this->get_logger(),trigger_on?"Trigger on!":"Trigger off!");
-            }else if (switch_state == msg->SW_UP) {
-                shooter_on = !shooter_on;
-                RCLCPP_INFO(this->get_logger(),shooter_on?"Shooter on!":"Shooter off!");
-            }
-            if(trigger_on && !shooter_on){
-                trigger_on = false;
-                RCLCPP_WARN(this->get_logger(),"Trigger off!: cannot turn trigger on while shooter is off!");
-            }
-        }
-        if(msg->sw_right == msg->SW_DOWN){
-            if(shooter_on) {
-                shooter_on = false;
-                RCLCPP_WARN(this->get_logger(),"Shooter off! Zero force!");
-            }
-            if(trigger_on) {
-                trigger_on = false;
-                RCLCPP_WARN(this->get_logger(),"Trigger off! Zero force!");
-            }
-        }
-        prev_switch_state = switch_state;
-    }
 
     void HeatController::data_publisher() {
         if(this->trigger_on && this->shooter_on){
@@ -241,6 +236,26 @@ namespace gary_shoot{
         LeftShooterWheelPIDPublisher->publish(LeftShooterWheelPIDMsg);
         RightShooterWheelPIDPublisher->publish(RightShooterWheelPIDMsg);
         TriggerWheelPIDPublisher->publish(TriggerWheelPIDMsg);
+    }
+
+    void HeatController::lf_callback(std_msgs::msg::Float64::SharedPtr msg) {
+
+    }
+
+    void HeatController::rf_callback(std_msgs::msg::Float64::SharedPtr msg) {
+
+    }
+
+    void HeatController::tw_callback(std_msgs::msg::Float64::SharedPtr msg) {
+
+    }
+
+    void HeatController::cool_callback(gary_msgs::msg::RobotStatus::SharedPtr msg) {
+
+    }
+
+    void HeatController::heat_callback(gary_msgs::msg::PowerHeat::SharedPtr msg) {
+
     }
 }
 
