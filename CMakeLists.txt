@@ -34,15 +34,15 @@ add_executable(dr16_forwarder
         src/dr16_forwarder.cpp)
 add_executable(shooter_heat_control
         src/shooter_heat_control.cpp)
-#add_executable(barrel_switcher
-#        src/barrel_switcher.cpp)
+add_executable(barrel_switcher
+        src/barrel_switcher.cpp)
 #add_executable(cover_controller
 #        src/cover_controller.cpp)
 
 target_include_directories(shooter_controller PRIVATE include)
 target_include_directories(dr16_forwarder PRIVATE include)
 target_include_directories(shooter_heat_control PRIVATE include)
-#target_include_directories(barrel_switcher PRIVATE include)
+target_include_directories(barrel_switcher PRIVATE include)
 #target_include_directories(cover_controller PRIVATE include)
 
 ament_target_dependencies(
@@ -72,16 +72,16 @@ ament_target_dependencies(
         gary_msgs
         std_msgs
 )
-#ament_target_dependencies(
-#        barrel_switcher
-#        rclcpp
-#        rclcpp_components
-#        rclcpp_lifecycle
-#        lifecycle_msgs
-#        gary_msgs
-#        diagnostic_msgs
-#        controller_manager_msgs
-#)
+ament_target_dependencies(
+        barrel_switcher
+        rclcpp
+        rclcpp_components
+        rclcpp_lifecycle
+        lifecycle_msgs
+        gary_msgs
+        diagnostic_msgs
+        controller_manager_msgs
+)
 #ament_target_dependencies(
 #        cover_controller
 #        rclcpp
@@ -98,17 +98,17 @@ add_library(shooter_controller_lib SHARED
         src/shooter_controller.cpp)
 add_library(dr16_forwarder_lib SHARED
         src/dr16_forwarder.cpp)
-#add_library(shooter_heat_control_lib SHARED
-#        src/shooter_heat_control.cpp)
-#add_library(barrel_switcher_lib SHARED
-#        src/barrel_switcher.cpp)
+add_library(shooter_heat_control_lib SHARED
+        src/shooter_heat_control.cpp)
+add_library(barrel_switcher_lib SHARED
+        src/barrel_switcher.cpp)
 #add_library(cover_controller_lib SHARED
 #        src/cover_controller.cpp)
 
 target_include_directories(shooter_controller_lib PRIVATE include)
 target_include_directories(dr16_forwarder_lib PRIVATE include)
-#target_include_directories(shooter_heat_control_lib PRIVATE include)
-#target_include_directories(barrel_switcher_lib PRIVATE include)
+target_include_directories(shooter_heat_control_lib PRIVATE include)
+target_include_directories(barrel_switcher_lib PRIVATE include)
 #target_include_directories(cover_controller_lib PRIVATE include)
 
 ament_target_dependencies(
@@ -129,25 +129,25 @@ ament_target_dependencies(
         gary_msgs
         diagnostic_msgs
 )
-#ament_target_dependencies(
-#        shooter_heat_control_lib
-#        rclcpp
-#        rclcpp_components
-#        rclcpp_lifecycle
-#        lifecycle_msgs
-#        gary_msgs
-#        std_msgs
-#)
-#ament_target_dependencies(
-#        barrel_switcher_lib
-#        rclcpp
-#        rclcpp_components
-#        rclcpp_lifecycle
-#        lifecycle_msgs
-#        gary_msgs
-#        diagnostic_msgs
-#        controller_manager_msgs
-#)
+ament_target_dependencies(
+        shooter_heat_control_lib
+        rclcpp
+        rclcpp_components
+        rclcpp_lifecycle
+        lifecycle_msgs
+        gary_msgs
+        std_msgs
+)
+ament_target_dependencies(
+        barrel_switcher_lib
+        rclcpp
+        rclcpp_components
+        rclcpp_lifecycle
+        lifecycle_msgs
+        gary_msgs
+        diagnostic_msgs
+        controller_manager_msgs
+)
 #ament_target_dependencies(
 #        cover_controller_lib
 #        rclcpp
@@ -161,8 +161,8 @@ ament_target_dependencies(
 
 rclcpp_components_register_nodes(shooter_controller_lib "gary_shoot::ShooterController")
 rclcpp_components_register_nodes(dr16_forwarder_lib "gary_shoot::DR16Forwarder")
-#rclcpp_components_register_nodes(shooter_heat_control_lib "gary_shoot::ShooterHeatControl")
-#rclcpp_components_register_nodes(barrel_switcher_lib "gary_shoot::BarrelSwitcher")
+rclcpp_components_register_nodes(shooter_heat_control_lib "gary_shoot::ShooterHeatControl")
+rclcpp_components_register_nodes(barrel_switcher_lib "gary_shoot::BarrelSwitcher")
 #rclcpp_components_register_nodes(cover_controller_lib "gary_shoot::CoverController")
 
 if(BUILD_TESTING)
@@ -176,22 +176,6 @@ if(BUILD_TESTING)
   ament_lint_auto_find_test_dependencies()
 endif()
 
-add_library(shooter_heat_control_lib SHARED src/shooter_heat_control.cpp)
-
-target_include_directories(shooter_heat_control_lib PRIVATE include)
-
-ament_target_dependencies(
-        shooter_heat_control_lib
-        rclcpp
-        lifecycle_msgs
-        rclcpp_lifecycle
-        rclcpp_components
-        gary_msgs
-        std_msgs
-)
-
-rclcpp_components_register_nodes(shooter_heat_control_lib "gary_shoot::ShooterHeatControl")
-
 
 install(TARGETS shooter_controller
         DESTINATION lib/${PROJECT_NAME}
@@ -202,9 +186,9 @@ install(TARGETS dr16_forwarder
 install(TARGETS shooter_heat_control
         DESTINATION lib/${PROJECT_NAME}
         )
-#install(TARGETS barrel_switcher
-#        DESTINATION lib/${PROJECT_NAME}
-#        )
+install(TARGETS barrel_switcher
+        DESTINATION lib/${PROJECT_NAME}
+        )
 #install(TARGETS cover_controller
 #        DESTINATION lib/${PROJECT_NAME}
 #        )
@@ -221,14 +205,10 @@ install(TARGETS shooter_heat_control_lib
         ARCHIVE DESTINATION lib
         LIBRARY DESTINATION lib
         RUNTIME DESTINATION bin)
-#install(TARGETS shooter_heat_control_lib
-#        ARCHIVE DESTINATION lib
-#        LIBRARY DESTINATION lib
-#        RUNTIME DESTINATION bin)
-#install(TARGETS barrel_switcher_lib
-#        ARCHIVE DESTINATION lib
-#        LIBRARY DESTINATION lib
-#        RUNTIME DESTINATION bin)
+install(TARGETS barrel_switcher_lib
+        ARCHIVE DESTINATION lib
+        LIBRARY DESTINATION lib
+        RUNTIME DESTINATION bin)
 #install(TARGETS cover_controller_lib
 #        ARCHIVE DESTINATION lib
 #        LIBRARY DESTINATION lib

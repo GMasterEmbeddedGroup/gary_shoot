@@ -12,8 +12,7 @@ ShooterHeatControl::ShooterHeatControl(const rclcpp::NodeOptions &options) : rcl
     this->declare_parameter("trigger_pub_topic", "/shooter/rc_trigger_set_limited");
     this->declare_parameter("trigger_sub_topic", "/shooter/rc_trigger_set");
     this->declare_parameter("power_heat_topic", "/referee/power_heat");
-    this->declare_parameter("heat_control_level", 150.0f);
-    this->declare_parameter("heat_min_level", 50.0f);
+    this->declare_parameter("heat_max_level", 200.0f);
 }
 
 CallbackReturn ShooterHeatControl::on_configure(const rclcpp_lifecycle::State &previous_state) {
@@ -40,13 +39,13 @@ CallbackReturn ShooterHeatControl::on_configure(const rclcpp_lifecycle::State &p
             this->power_heat_topic, rclcpp::SystemDefaultsQoS(),
             std::bind(&ShooterHeatControl::power_heat_callback, this, std::placeholders::_1), sub_options);
 
-    //get heat_control_level
-    this->heat_control_level = this->get_parameter("heat_control_level").as_double();
+    //get heat_max_level
+    this->heat_max_level = this->get_parameter("heat_max_level").as_double();
 
-    //get heat_min_level
-    this->heat_min_level = this->get_parameter("heat_min_level").as_double();
+    this->switch_barrel_client = this->create_client<gary_msgs::srv::SwitchBarrel>("/switch_barrel");
 
-    this->scale_factor = 1.0f;
+    this->scale_factor_id1 = 1.0f;
+    this->scale_factor_id2 = 1.0f;
 
     RCLCPP_INFO(this->get_logger(), "configured");
 
@@ -112,20 +111,64 @@ CallbackReturn ShooterHeatControl::on_error(const rclcpp_lifecycle::State &previ
 
 void ShooterHeatControl::trigger_callback(std_msgs::msg::Float64 ::SharedPtr msg) {
     std_msgs::msg::Float64 data;
-    data.data = msg->data * this->scale_factor;
+
+    //switcher is not available
+    if (! this->switch_barrel_client->service_is_ready()) {
+        if (this->scale_factor_id1 == 0.0 || this->scale_factor_id2 == 0.0) {
+            data.data = 0.0;
+        } else {
+            data.data = msg->data;
+        }
+        this->trigger_publisher->publish(data);
+        return;
+    }
+
+    //get switch status
+    if (this->switching) {
+        if (this->resp.wait_for(0ms) == std::future_status::ready) {
+            if (resp.get()->success) {
+                this->switching = false;
+                RCLCPP_INFO(this->get_logger(), "switched to barrel %d", this->barrel_id);
+            } else {
+                auto req = std::make_shared<gary_msgs::srv::SwitchBarrel::Request>();
+                req->barrel_id = this->barrel_id;
+                this->resp = this->switch_barrel_client->async_send_request(req);
+            }
+
+        }
+        data.data = 0.0;
+        this->trigger_publisher->publish(data);
+        return;
+    }
+
+    if (this->barrel_id == 0 && this->scale_factor_id1 == 0.0) {
+        auto req = std::make_shared<gary_msgs::srv::SwitchBarrel::Request>();
+        req->barrel_id = 1;
+        this->barrel_id = 1;
+        this->switching = true;
+        this->resp = this->switch_barrel_client->async_send_request(req);
+        data.data = 0.0;
+        RCLCPP_INFO(this->get_logger(), "switching to barrel %d", this->barrel_id);
+    } else if (this->barrel_id == 1 && this->scale_factor_id2 == 0.0) {
+        auto req = std::make_shared<gary_msgs::srv::SwitchBarrel::Request>();
+        req->barrel_id = 0;
+        this->barrel_id = 0;
+        this->switching = true;
+        this->resp = this->switch_barrel_client->async_send_request(req);
+        data.data = 0.0;
+        RCLCPP_INFO(this->get_logger(), "switching to barrel %d", this->barrel_id);
+    } else {
+        if (this->barrel_id == 0) data.data = msg->data * this->scale_factor_id1;
+        if (this->barrel_id == 1) data.data = msg->data * this->scale_factor_id2;
+    }
+
     this->trigger_publisher->publish(data);
 }
 
 
 void ShooterHeatControl::power_heat_callback(gary_msgs::msg::PowerHeat::SharedPtr msg) {
-    if (static_cast<double>(msg->shooter_17mm_id1_heat) < this->heat_min_level) {
-        this->scale_factor = 1.0;
-    } else {
-        this->scale_factor = (this->heat_control_level - static_cast<double>(msg->shooter_17mm_id1_heat)) /
-                             (this->heat_control_level - this->heat_min_level);
-    }
-    this->scale_factor = std::min<double>(this->scale_factor, 1.0f);
-    this->scale_factor = std::max<double>(this->scale_factor, 0.0f);
+    this->scale_factor_id1 = (static_cast<double>(msg->shooter_17mm_id1_heat) < this->heat_max_level) ? 1.0 : 0.0;
+    this->scale_factor_id2 = (static_cast<double>(msg->shooter_17mm_id2_heat) < this->heat_max_level) ? 1.0 : 0.0;
 }
 
 

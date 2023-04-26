@@ -78,7 +78,7 @@ namespace gary_shoot {
 
         SwitcherEffortPIDPublisher->on_activate();
 
-        this->timer_pub = this->create_wall_timer( 1000ms/1000, [this] { publisher(); });
+        this->timer_pub = this->create_wall_timer( 1000ms/100, [this] { publisher(); });
 
         RCLCPP_INFO(this->get_logger(), "activated");
         return CallbackReturn::SUCCESS;
@@ -117,7 +117,7 @@ namespace gary_shoot {
     void BarrelSwitcher::switch_srv_callback(const std::shared_ptr<gary_msgs::srv::SwitchBarrel::Request> request,
                                              std::shared_ptr<gary_msgs::srv::SwitchBarrel::Response> response) {
 
-        RCLCPP_INFO(this->get_logger(),"Received Call.");
+        RCLCPP_DEBUG(this->get_logger(),"Received Call.");
 
         if(request->barrel_id == 0){
             if(switched){
@@ -140,39 +140,35 @@ namespace gary_shoot {
     }
 
     void BarrelSwitcher::publisher() {
+	bool no_pub = false;
         static int state = 0;
         static double delay_time = DELAY_TIME;
         static double switch_time = SWITCH_TIME;
         if(switching){
             if(state == 0){
-                delay_time -= 1.0;
+		no_pub = true;
+                delay_time -= 10.0;
                 if(delay_time <= 0.0){
                     state = 1;
                     delay_time = DELAY_TIME;
                     RCLCPP_INFO(this->get_logger(),"Pre-Delayed...");
-                    return;
                 }
-                return;
             }else if(state == 1){
-                current_effort -= ((effort_max - effort_min) / SWITCH_TIME);
-                switch_time -= 1.0;
+                current_effort -= 10.0 * ((effort_max - effort_min) / SWITCH_TIME);
+                switch_time -= 10.0;
                 if(switch_time <= 0.0){
                     state = 2;
                     switch_time = SWITCH_TIME;
                     RCLCPP_INFO(this->get_logger(),"Switched!");
-                    return;
                 }
-                return;
             }else if (state == 2){
-                delay_time -= 1.0;
+                delay_time -= 10.0;
                 if(delay_time <= 0.0){
                     state = 0;
                     delay_time = DELAY_TIME;
                     switching = false;
                     RCLCPP_INFO(this->get_logger(),"Past-Delayed...");
-                    return;
                 }
-                return;
             }
         }
         if(!switched) {
@@ -180,9 +176,11 @@ namespace gary_shoot {
         }else{
             SwitcherEffortPIDMsg.data = 0-current_effort;
         }
-        auto clock = rclcpp::Clock();
-        RCLCPP_DEBUG_THROTTLE(this->get_logger(), clock, 100, "setting: %lf", SwitcherEffortPIDMsg.data);
-        if(SwitcherEffortPIDPublisher.get()!= nullptr) SwitcherEffortPIDPublisher->publish(SwitcherEffortPIDMsg);
+	if(!no_pub){
+            auto clock = rclcpp::Clock();
+            RCLCPP_DEBUG_THROTTLE(this->get_logger(), clock, 100, "setting: %lf", SwitcherEffortPIDMsg.data);
+            if(SwitcherEffortPIDPublisher.get()!= nullptr) SwitcherEffortPIDPublisher->publish(SwitcherEffortPIDMsg);
+	}
     }
 
 //    void BarrelSwitcher::setzero() {
