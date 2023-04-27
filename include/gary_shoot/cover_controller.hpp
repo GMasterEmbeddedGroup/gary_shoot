@@ -15,9 +15,6 @@
 namespace gary_shoot{
     using CallbackReturn = rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn;
 
-    constexpr double SWITCH_TIME = 2000.0;
-    constexpr double DELAY_TIME = 10.0;
-
     class CoverController : public rclcpp_lifecycle::LifecycleNode {
 
     public:
@@ -51,6 +48,9 @@ namespace gary_shoot{
         double effort_max;
         double effort_min;
         double current_effort;
+
+        double SWITCH_TIME;
+        double DELAY_TIME;
     };
 
 }
