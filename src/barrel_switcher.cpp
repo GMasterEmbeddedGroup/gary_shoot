@@ -20,9 +20,14 @@ namespace gary_shoot {
         switching = false;
         this->declare_parameter("effort_max", 0.3372);
         this->declare_parameter("effort_min", 0.2010);
+        this->declare_parameter("switch_time_ms", 350.0);
+        this->declare_parameter("delay_time_ms", 300.0);
         effort_max = 0.3372;
         effort_min = 0.2010;
         current_effort = effort_min;
+
+        SWITCH_TIME = 350.0;
+        DELAY_TIME = 300.0;
 
 //        this->declare_parameter("tolerable_diff", M_PI_4 / 4);
 //        this->tolerable_diff = M_PI_4 / 4;
@@ -43,6 +48,8 @@ namespace gary_shoot {
 //        this->tolerable_diff =  this->get_parameter("tolerable_diff").as_double();
         this->effort_max =  this->get_parameter("effort_max").as_double();
         this->effort_min =  this->get_parameter("effort_min").as_double();
+        this->SWITCH_TIME =  this->get_parameter("switch_time_ms").as_double();
+        this->DELAY_TIME =  this->get_parameter("delay_time_ms").as_double();
         current_effort = effort_min;
 //        this->position.emplace(0,this->get_parameter("barrel_0_position").as_double());
 //        this->position.emplace(1,this->get_parameter("barrel_1_position").as_double());

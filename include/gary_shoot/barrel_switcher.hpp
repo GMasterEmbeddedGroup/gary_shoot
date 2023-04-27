@@ -15,9 +15,6 @@
 namespace gary_shoot{
     using CallbackReturn = rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn;
 
-    constexpr double SWITCH_TIME = 350.0;
-    constexpr double DELAY_TIME = 300.0;
-
     class BarrelSwitcher : public rclcpp_lifecycle::LifecycleNode {
 
     public:
@@ -56,6 +53,9 @@ namespace gary_shoot{
         double effort_max;
         double effort_min;
         volatile double current_effort;
+
+        double SWITCH_TIME;
+        double DELAY_TIME;
 //        void setzero();
 
 //        double tolerable_diff;

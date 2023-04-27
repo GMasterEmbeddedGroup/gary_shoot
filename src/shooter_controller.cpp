@@ -24,6 +24,8 @@ namespace gary_shoot {
         this->declare_parameter("diagnostic_topic", "/diagnostics_agg");
         this->declare_parameter("pid_topic", "/trigger_pid/pid");
         this->declare_parameter("reverse_pid_set", -3000.0);
+        this->declare_parameter("block_time_ms", 500);
+        this->declare_parameter("reverse_time_ms", 500);
 
         this->shooter_wheel_receive_topic = "/shooter_wheel_controller_pid_set";
         this->trigger_wheel_receive_topic = "/trigger_wheel_controller_pid_set";
@@ -50,6 +52,9 @@ namespace gary_shoot {
         reverse = false;
         reverse_pid_set = -3000.0;
         BLOCK_TRIGGER_SPEED_DIFF = 100;
+        BLOCK_TIME = 500;
+        REVERSE_TIME = 500;
+
 
         diag_objs.clear();
         real_trigger_speed = trigger_wheel_current_set;
@@ -111,6 +116,9 @@ namespace gary_shoot {
         diag_objs.emplace(this->get_parameter("trigger_wheel_diag_name").as_string(), false);
         diag_objs.emplace(this->get_parameter("left_shooter_wheel_diag_name").as_string(), false);
         diag_objs.emplace(this->get_parameter("right_shooter_wheel_diag_name").as_string(), false);
+
+        BLOCK_TIME = this->get_parameter("block_time_ms").as_int();
+        REVERSE_TIME = this->get_parameter("reverse_time_ms").as_int();
 
         RCLCPP_INFO(this->get_logger(), "configured");
         return CallbackReturn::SUCCESS;
