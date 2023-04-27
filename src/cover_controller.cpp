@@ -18,9 +18,9 @@ namespace gary_shoot {
         this->timer_pub = nullptr;
         switched = false;
         switching = false;
-        this->declare_parameter("effort_max", 5.0);
+        this->declare_parameter("effort_max", 3.0);
         this->declare_parameter("effort_min", 0.2);
-        effort_max = 5.0;
+        effort_max = 3.0;
         effort_min = 0.2;
         current_effort = effort_min;
 
@@ -136,9 +136,7 @@ namespace gary_shoot {
                     state = 1;
                     delay_time = DELAY_TIME;
                     RCLCPP_INFO(this->get_logger(),"Pre-Delayed...");
-                    return;
                 }
-                return;
             }else if(state == 1){
                 current_effort = effort_max;
                 switch_time -= 10.0;
@@ -146,9 +144,7 @@ namespace gary_shoot {
                     state = 2;
                     switch_time = SWITCH_TIME;
                     RCLCPP_INFO(this->get_logger(),"Switched!");
-                    return;
                 }
-                return;
             }else if (state == 2){
                 current_effort = effort_min;
                 delay_time -= 10.0;
@@ -157,9 +153,7 @@ namespace gary_shoot {
                     delay_time = DELAY_TIME;
                     switching = false;
                     RCLCPP_INFO(this->get_logger(),"Past-Delayed...");
-                    return;
                 }
-                return;
             }
         }
         if (!switched) {
