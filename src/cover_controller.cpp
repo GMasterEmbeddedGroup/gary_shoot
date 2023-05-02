@@ -153,15 +153,20 @@ namespace gary_shoot {
         using ServiceResponseFuture =
                 rclcpp::Client<gary_msgs::srv::ResetMotorPosition>::SharedFuture;
         bool success = false;
-        auto response_received_callback = [this,&success](ServiceResponseFuture future) {
+        bool waiting = true;
+        auto response_received_callback = [this,&success,&waiting](ServiceResponseFuture future) {
             while (future.wait_for(2s) != std::future_status::ready){
-                RCLCPP_DEBUG(this->get_logger(), "Waiting for Response....");
+                RCLCPP_INFO(this->get_logger(), "Waiting for Response....");
             }
-            RCLCPP_DEBUG(this->get_logger(), "Received Response.");
+            RCLCPP_INFO(this->get_logger(), "Received Response.");
+            waiting = false;
             success = future.get()->succ;
         };
 
         auto reset_pos_result = ResetMotorPositionClient->async_send_request(reset_request,response_received_callback);
+        while(waiting && rclcpp::ok()){
+            //do nothing
+        }
         if(!success){
             RCLCPP_ERROR(this->get_logger(), "Failed to reset position. Exiting.");
             return false;
