@@ -13,41 +13,47 @@ namespace gary_shoot {
     CoverController::CoverController(const rclcpp::NodeOptions &options) : rclcpp_lifecycle::LifecycleNode(
             "cover_controller", options) {
         this->CoverSwitchService = nullptr;
-        SwitcherEffortPIDPublisher = nullptr;
+//        SwitcherEffortPIDPublisher = nullptr;
 //        this->ControllerSwitchClient = nullptr;
         this->timer_pub = nullptr;
-        switched = false;
-        switching = false;
-        this->declare_parameter("effort_max", 3.0);
-        this->declare_parameter("effort_min", 0.2);
-        this->declare_parameter("switch_time_ms", 850.0);
-        this->declare_parameter("delay_time_ms", 10.0);
-        effort_max = 3.0;
-        effort_min = 0.2;
-        current_effort = effort_min;
+        this->target_position = 0.0;
+        this->open = false;
+//        switched = false;
+//        switching = false;
+//        this->declare_parameter("effort_max", 3.0);
+//        this->declare_parameter("effort_min", 0.2);
+//        this->declare_parameter("switch_time_ms", 850.0);
+//        this->declare_parameter("delay_time_ms", 10.0);
+        this->declare_parameter("target_position", 90.0);
+        this->target_position = 90.0;
+//        effort_max = 3.0;
+//        effort_min = 0.2;
+//        current_effort = effort_min;
 
-        SWITCH_TIME = 850.0;
-        DELAY_TIME = 10.0;
+//        SWITCH_TIME = 850.0;
+//        DELAY_TIME = 10.0;
 
     }
 
     CallbackReturn CoverController::on_configure(const rclcpp_lifecycle::State &previous_state) {
         RCL_UNUSED(previous_state);
 
-        this->effort_max =  this->get_parameter("effort_max").as_double();
-        this->effort_min =  this->get_parameter("effort_min").as_double();
-        this->SWITCH_TIME =  this->get_parameter("switch_time_ms").as_double();
-        this->DELAY_TIME =  this->get_parameter("delay_time_ms").as_double();
-        current_effort = effort_min;
+//        this->effort_max =  this->get_parameter("effort_max").as_double();
+//        this->effort_min =  this->get_parameter("effort_min").as_double();
+//        this->SWITCH_TIME =  this->get_parameter("switch_time_ms").as_double();
+//        this->DELAY_TIME =  this->get_parameter("delay_time_ms").as_double();
+        this->target_position =  this->get_parameter("target_position").as_double();
+//        current_effort = effort_min;
 
-        SwitcherEffortPIDPublisher =
+        SwitcherPositionPIDPublisher =
                 create_publisher<std_msgs::msg::Float64>
-                        ("/cover_switch_pid_effort/cmd", rclcpp::SystemDefaultsQoS());
+                        ("/cover_switch_pid_position/cmd", rclcpp::SystemDefaultsQoS());
         CoverSwitchService =
                 create_service<gary_msgs::srv::SwitchCover>("/switch_cover",
                                                             std::bind(&CoverController::switch_srv_callback, this,
                                                                       std::placeholders::_1, std::placeholders::_2));
 
+        ResetMotorPositionClient = create_client<gary_msgs::srv::ResetMotorPosition>("/reset_motor_position");
 //        this->need_zero = true;
 
         RCLCPP_INFO(this->get_logger(), "configured");
@@ -57,7 +63,7 @@ namespace gary_shoot {
     CallbackReturn CoverController::on_cleanup(const rclcpp_lifecycle::State &previous_state) {
         RCL_UNUSED(previous_state);
 
-        if (this->SwitcherEffortPIDPublisher.get() != nullptr) SwitcherEffortPIDPublisher.reset();
+        if (this->SwitcherPositionPIDPublisher.get() != nullptr) SwitcherPositionPIDPublisher.reset();
         if (CoverSwitchService.get() != nullptr) CoverSwitchService.reset();
 
         RCLCPP_INFO(this->get_logger(), "cleaned up");
@@ -67,9 +73,13 @@ namespace gary_shoot {
     CallbackReturn CoverController::on_activate(const rclcpp_lifecycle::State &previous_state) {
         RCL_UNUSED(previous_state);
         using namespace std::chrono_literals;
-        SwitcherEffortPIDMsg.data = 0;
+        SwitcherPositionPIDMsg.data = 0;
 
-        SwitcherEffortPIDPublisher->on_activate();
+        SwitcherPositionPIDPublisher->on_activate();
+
+        if(!reset_motor()){
+            return CallbackReturn::FAILURE;
+        }
 
         this->timer_pub = this->create_wall_timer(1000ms / 100, [this] { publisher(); });
 
@@ -80,8 +90,9 @@ namespace gary_shoot {
     CallbackReturn CoverController::on_deactivate(const rclcpp_lifecycle::State &previous_state) {
         RCL_UNUSED(previous_state);
 
-        if (this->SwitcherEffortPIDPublisher.get() != nullptr) SwitcherEffortPIDPublisher.reset();
+        if (this->SwitcherPositionPIDPublisher.get() != nullptr) SwitcherPositionPIDPublisher.reset();
         if (CoverSwitchService.get() != nullptr) CoverSwitchService.reset();
+        if(this->timer_pub.get()!= nullptr) this->timer_pub.reset();
 
         RCLCPP_INFO(this->get_logger(), "deactivated");
         return CallbackReturn::SUCCESS;
@@ -90,7 +101,7 @@ namespace gary_shoot {
     CallbackReturn CoverController::on_shutdown(const rclcpp_lifecycle::State &previous_state) {
         RCL_UNUSED(previous_state);
 
-        if (this->SwitcherEffortPIDPublisher.get() != nullptr) SwitcherEffortPIDPublisher.reset();
+        if (this->SwitcherPositionPIDPublisher.get() != nullptr) SwitcherPositionPIDPublisher.reset();
         if (CoverSwitchService.get() != nullptr) CoverSwitchService.reset();
 
         RCLCPP_INFO(this->get_logger(), "shutdown");
@@ -100,7 +111,7 @@ namespace gary_shoot {
     CallbackReturn CoverController::on_error(const rclcpp_lifecycle::State &previous_state) {
         RCL_UNUSED(previous_state);
 
-        if (this->SwitcherEffortPIDPublisher.get() != nullptr) SwitcherEffortPIDPublisher.reset();
+        if (this->SwitcherPositionPIDPublisher.get() != nullptr) SwitcherPositionPIDPublisher.reset();
         if (CoverSwitchService.get() != nullptr) CoverSwitchService.reset();
 
         RCLCPP_ERROR(this->get_logger(), "Error happened");
@@ -112,65 +123,43 @@ namespace gary_shoot {
 
         RCLCPP_INFO(this->get_logger(), "Received Call.");
 
-        if (request->open) {
-            if (switched) {
-                current_effort = effort_max;
-                switching = true;
-                RCLCPP_INFO(this->get_logger(), "Switching to Cover 0...");
-            }
-            switched = false;
-        } else if (!request->open) {
-            if (!switched) {
-                current_effort = effort_max;
-                switching = true;
-                RCLCPP_INFO(this->get_logger(), "Switching to Cover 1...");
-            }
-            switched = true;
-        }
+        this->open = request->open;
 
-        response->success = !switching;
+        response->success = true;
 
     }
 
     void CoverController::publisher() {
-        static int state = 0;
-        static double delay_time = DELAY_TIME;
-        static double switch_time = SWITCH_TIME;
-        if(switching){
-            if(state == 0){
-                delay_time -= 10.0;
-                if(delay_time <= 0.0){
-                    state = 1;
-                    delay_time = DELAY_TIME;
-                    RCLCPP_INFO(this->get_logger(),"Pre-Delayed...");
-                }
-            }else if(state == 1){
-                current_effort = effort_max;
-                switch_time -= 10.0;
-                if(switch_time <= 0.0){
-                    state = 2;
-                    switch_time = SWITCH_TIME;
-                    RCLCPP_INFO(this->get_logger(),"Switched!");
-                }
-            }else if (state == 2){
-                current_effort = effort_min;
-                delay_time -= 10.0;
-                if(delay_time <= 0.0){
-                    state = 0;
-                    delay_time = DELAY_TIME;
-                    switching = false;
-                    RCLCPP_INFO(this->get_logger(),"Past-Delayed...");
-                }
-            }
-        }
-        if (!switched) {
-            SwitcherEffortPIDMsg.data = 0 + current_effort;
-        } else {
-            SwitcherEffortPIDMsg.data = 0 - current_effort;
-        }
+        SwitcherPositionPIDMsg.data = open ? target_position : 0.0;
+
         auto clock = rclcpp::Clock();
-        RCLCPP_DEBUG_THROTTLE(this->get_logger(), clock, 100, "setting: %lf", SwitcherEffortPIDMsg.data);
-        if (SwitcherEffortPIDPublisher.get() != nullptr) SwitcherEffortPIDPublisher->publish(SwitcherEffortPIDMsg);
+        RCLCPP_DEBUG_THROTTLE(this->get_logger(), clock, 100, "setting: %lf", SwitcherPositionPIDMsg.data);
+        if (SwitcherPositionPIDPublisher.get() != nullptr) SwitcherPositionPIDPublisher->publish(SwitcherPositionPIDMsg);
+    }
+
+    bool CoverController::reset_motor() {
+        auto reset_request = std::make_shared<gary_msgs::srv::ResetMotorPosition::Request>();
+        reset_request->motor_name = "cover";
+
+        using namespace std::chrono_literals;
+        while (!ResetMotorPositionClient->wait_for_service(1s)) {
+            if (!rclcpp::ok()) {
+                RCLCPP_ERROR(this->get_logger(), "Interrupted while waiting for the service. Exiting.");
+                return false;
+            }
+            RCLCPP_INFO(this->get_logger(), "Service \'ResetMotorPositionClient\' not available, waiting again...");
+        }
+        auto reset_pos_result = ResetMotorPositionClient->async_send_request(reset_request);
+        // Wait for the result.
+        while(reset_pos_result.wait_for(2s) != std::future_status::ready){
+            RCLCPP_INFO(this->get_logger(), "Waiting for \'ResetMotorPositionClient\' response...");
+            rclcpp::spin_some(this->get_node_base_interface());
+        }
+        if(!reset_pos_result.get()->succ){
+            RCLCPP_ERROR(this->get_logger(), "Failed to reset position. Exiting.");
+            return false;
+        }
+        return true;
     }
 }
 

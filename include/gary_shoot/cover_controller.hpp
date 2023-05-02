@@ -30,8 +30,8 @@ namespace gary_shoot{
         CallbackReturn on_shutdown(const rclcpp_lifecycle::State & previous_state) override;
         CallbackReturn on_error(const rclcpp_lifecycle::State & previous_state) override;
 
-        std_msgs::msg::Float64 SwitcherEffortPIDMsg;
-        rclcpp_lifecycle::LifecyclePublisher<std_msgs::msg::Float64>::SharedPtr SwitcherEffortPIDPublisher;
+//        std_msgs::msg::Float64 SwitcherEffortPIDMsg;
+//        rclcpp_lifecycle::LifecyclePublisher<std_msgs::msg::Float64>::SharedPtr SwitcherEffortPIDPublisher;
         std_msgs::msg::Float64 SwitcherPositionPIDMsg;
         rclcpp_lifecycle::LifecyclePublisher<std_msgs::msg::Float64>::SharedPtr SwitcherPositionPIDPublisher;
 
@@ -43,14 +43,18 @@ namespace gary_shoot{
         void publisher();
 
         rclcpp::Client<gary_msgs::srv::ResetMotorPosition>::SharedPtr ResetMotorPositionClient;
-        bool switching;
-        bool switched;
-        double effort_max;
-        double effort_min;
-        double current_effort;
+        bool reset_motor();
 
-        double SWITCH_TIME;
-        double DELAY_TIME;
+        double target_position;
+        bool open;
+//        bool switching;
+//        bool switched;
+//        double effort_max;
+//        double effort_min;
+//        double current_effort;
+//
+//        double SWITCH_TIME;
+//        double DELAY_TIME;
     };
 
 }
