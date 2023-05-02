@@ -153,7 +153,11 @@ namespace gary_shoot {
         using ServiceResponseFuture =
                 rclcpp::Client<gary_msgs::srv::ResetMotorPosition>::SharedFuture;
         bool success = false;
-        auto response_received_callback = [&success](ServiceResponseFuture future) {
+        auto response_received_callback = [this,&success](ServiceResponseFuture future) {
+            while (future.wait_for(2s) != std::future_status::ready){
+                RCLCPP_DEBUG(this->get_logger(), "Waiting for Response....");
+            }
+            RCLCPP_DEBUG(this->get_logger(), "Received Response.");
             success = future.get()->succ;
         };
 
