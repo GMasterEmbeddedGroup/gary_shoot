@@ -149,13 +149,16 @@ namespace gary_shoot {
             }
             RCLCPP_INFO(this->get_logger(), "Service \'ResetMotorPositionClient\' not available, waiting again...");
         }
-        auto reset_pos_result = ResetMotorPositionClient->async_send_request(reset_request);
-        // Wait for the result.
-        while(reset_pos_result.wait_for(2s) != std::future_status::ready){
-            RCLCPP_INFO(this->get_logger(), "Waiting for \'ResetMotorPositionClient\' response...");
-            rclcpp::spin_some(this->get_node_base_interface());
-        }
-        if(!reset_pos_result.get()->succ){
+
+        using ServiceResponseFuture =
+                rclcpp::Client<gary_msgs::srv::ResetMotorPosition>::SharedFuture;
+        bool success = false;
+        auto response_received_callback = [&success](ServiceResponseFuture future) {
+            success = future.get()->succ;
+        };
+
+        auto reset_pos_result = ResetMotorPositionClient->async_send_request(reset_request,response_received_callback);
+        if(!success){
             RCLCPP_ERROR(this->get_logger(), "Failed to reset position. Exiting.");
             return false;
         }
