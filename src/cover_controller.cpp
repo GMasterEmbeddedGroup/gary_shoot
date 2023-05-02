@@ -164,8 +164,9 @@ namespace gary_shoot {
         };
 
         auto reset_pos_result = ResetMotorPositionClient->async_send_request(reset_request,response_received_callback);
+        auto clock = rclcpp::Clock();
         while(waiting && rclcpp::ok()){
-            //do nothing
+            RCLCPP_INFO_THROTTLE(this->get_logger(), clock, 1000, "Waiting for Response....");
         }
         if(!success){
             RCLCPP_ERROR(this->get_logger(), "Failed to reset position. Exiting.");
