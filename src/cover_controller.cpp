@@ -24,8 +24,8 @@ namespace gary_shoot {
 //        this->declare_parameter("effort_min", 0.2);
 //        this->declare_parameter("switch_time_ms", 850.0);
 //        this->declare_parameter("delay_time_ms", 10.0);
-        this->declare_parameter("target_position", 90.0);
-        this->target_position = 90.0;
+        this->declare_parameter("target_position", 1.0);
+        this->target_position = 1.0;
 //        effort_max = 3.0;
 //        effort_min = 0.2;
 //        current_effort = effort_min;
@@ -153,26 +153,19 @@ namespace gary_shoot {
         using ServiceResponseFuture =
                 rclcpp::Client<gary_msgs::srv::ResetMotorPosition>::SharedFuture;
         bool success = false;
-        bool waiting = true;
-        auto response_received_callback = [this,&success,&waiting](ServiceResponseFuture future) {
-            while (future.wait_for(2s) != std::future_status::ready){
-                RCLCPP_INFO(this->get_logger(), "Waiting for Response....");
-            }
+        bool zeroed = false;
+        auto response_received_callback = [this,&success,&zeroed](ServiceResponseFuture future) {
             RCLCPP_INFO(this->get_logger(), "Received Response.");
-            waiting = false;
             success = future.get()->succ;
+            zeroed = true;
         };
 
         auto reset_pos_result = ResetMotorPositionClient->async_send_request(reset_request,response_received_callback);
-        auto clock = rclcpp::Clock();
-        while(waiting && rclcpp::ok()){
-            RCLCPP_INFO_THROTTLE(this->get_logger(), clock, 1000, "Waiting for Response....");
-        }
-        if(!success){
-            RCLCPP_ERROR(this->get_logger(), "Failed to reset position. Exiting.");
+        if(zeroed && !success){
+            RCLCPP_ERROR(this->get_logger(), "Failed to reset position. Trying again.");
             return false;
         }
-        return true;
+        return true; //pretend it can be used.
     }
 }
 
