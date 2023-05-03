@@ -10,9 +10,12 @@ ShooterHeatControl::ShooterHeatControl(const rclcpp::NodeOptions &options) : rcl
         "shooter_heat_control", options) {
     //declare params
     this->declare_parameter("trigger_pub_topic", "/shooter/rc_trigger_set_limited");
+    this->declare_parameter("shooter_pub_topic", "/shooter/rc_shooter_set_limited");
     this->declare_parameter("trigger_sub_topic", "/shooter/rc_trigger_set");
+    this->declare_parameter("shooter_sub_topic", "/shooter/rc_shooter_set");
     this->declare_parameter("power_heat_topic", "/referee/power_heat");
     this->declare_parameter("heat_max_level", 200.0f);
+    this->barrel_max_speed_by_id.resize(3* sizeof(float));
 }
 
 CallbackReturn ShooterHeatControl::on_configure(const rclcpp_lifecycle::State &previous_state) {
@@ -33,11 +36,28 @@ CallbackReturn ShooterHeatControl::on_configure(const rclcpp_lifecycle::State &p
             this->trigger_sub_topic, rclcpp::SystemDefaultsQoS(),
             std::bind(&ShooterHeatControl::trigger_callback, this, std::placeholders::_1), sub_options);
 
+    //get shooter_pub_topic
+    this->shooter_pub_topic = this->get_parameter("shooter_pub_topic").as_string();
+    this->shooter_publisher = this->create_publisher<std_msgs::msg::Float64>(this->shooter_pub_topic,
+                                                                              rclcpp::SystemDefaultsQoS());
+    //get shooter_pub_topic
+    this->shooter_sub_topic = this->get_parameter("shooter_sub_topic").as_string();
+    this->shooter_subscriber = this->create_subscription<std_msgs::msg::Float64>(
+            this->shooter_sub_topic, rclcpp::SystemDefaultsQoS(),
+            std::bind(&ShooterHeatControl::shooter_callback, this, std::placeholders::_1), sub_options);
+
     //get power_heat_topic
     this->power_heat_topic = this->get_parameter("power_heat_topic").as_string();
     this->power_heat_subscriber = this->create_subscription<gary_msgs::msg::PowerHeat>(
             this->power_heat_topic, rclcpp::SystemDefaultsQoS(),
             std::bind(&ShooterHeatControl::power_heat_callback, this, std::placeholders::_1), sub_options);
+
+    this->shoot_data_subscriber = this->create_subscription<gary_msgs::msg::ShootData>(
+            "/referee/shoot_data", rclcpp::SystemDefaultsQoS(),
+            std::bind(&ShooterHeatControl::shoot_data_callback, this, std::placeholders::_1), sub_options);
+    this->robot_status_subscriber = this->create_subscription<gary_msgs::msg::RobotStatus>(
+            "/referee/robot_status", rclcpp::SystemDefaultsQoS(),
+            std::bind(&ShooterHeatControl::robot_status_callback, this, std::placeholders::_1), sub_options);
 
     //get heat_max_level
     this->heat_max_level = this->get_parameter("heat_max_level").as_double();
@@ -58,7 +78,12 @@ CallbackReturn ShooterHeatControl::on_cleanup(const rclcpp_lifecycle::State &pre
     //destroy objects
     this->trigger_publisher.reset();
     this->trigger_subscriber.reset();
+    this->shooter_publisher.reset();
+    this->shooter_subscriber.reset();
     this->power_heat_subscriber.reset();
+    if (this->robot_status_subscriber.get() != nullptr) this->robot_status_subscriber.reset();
+    if (this->shoot_data_subscriber.get() != nullptr) this->shoot_data_subscriber.reset();
+
 
     RCLCPP_INFO(this->get_logger(), "cleaning up");
     return CallbackReturn::SUCCESS;
@@ -69,6 +94,7 @@ CallbackReturn ShooterHeatControl::on_activate(const rclcpp_lifecycle::State &pr
 
     //activate lifecycle publisher
     this->trigger_publisher->on_activate();
+    this->shooter_publisher->on_activate();
 
     RCLCPP_INFO(this->get_logger(), "activated");
     return CallbackReturn::SUCCESS;
@@ -79,6 +105,7 @@ CallbackReturn ShooterHeatControl::on_deactivate(const rclcpp_lifecycle::State &
 
     //deactivate lifecycle publisher
     this->trigger_publisher->on_deactivate();
+    this->shooter_publisher->on_deactivate();
 
     RCLCPP_INFO(this->get_logger(), "deactivated");
     return CallbackReturn::SUCCESS;
@@ -90,7 +117,11 @@ CallbackReturn ShooterHeatControl::on_shutdown(const rclcpp_lifecycle::State &pr
     //destroy objects
     if (this->trigger_publisher.get() != nullptr) this->trigger_publisher.reset();
     if (this->trigger_subscriber.get() != nullptr) this->trigger_subscriber.reset();
+    if (this->shooter_publisher.get() != nullptr) this->shooter_publisher.reset();
+    if (this->shooter_subscriber.get() != nullptr) this->shooter_subscriber.reset();
     if (this->power_heat_subscriber.get() != nullptr) this->power_heat_subscriber.reset();
+    if (this->robot_status_subscriber.get() != nullptr) this->robot_status_subscriber.reset();
+    if (this->shoot_data_subscriber.get() != nullptr) this->shoot_data_subscriber.reset();
 
     RCLCPP_INFO(this->get_logger(), "shutdown");
     return CallbackReturn::SUCCESS;
@@ -102,7 +133,11 @@ CallbackReturn ShooterHeatControl::on_error(const rclcpp_lifecycle::State &previ
     //destroy objects
     if (this->trigger_publisher.get() != nullptr) this->trigger_publisher.reset();
     if (this->trigger_subscriber.get() != nullptr) this->trigger_subscriber.reset();
+    if (this->shooter_publisher.get() != nullptr) this->shooter_publisher.reset();
+    if (this->shooter_subscriber.get() != nullptr) this->shooter_subscriber.reset();
     if (this->power_heat_subscriber.get() != nullptr) this->power_heat_subscriber.reset();
+    if (this->robot_status_subscriber.get() != nullptr) this->robot_status_subscriber.reset();
+    if (this->shoot_data_subscriber.get() != nullptr) this->shoot_data_subscriber.reset();
 
     RCLCPP_INFO(this->get_logger(), "error");
     return CallbackReturn::SUCCESS;
@@ -169,6 +204,30 @@ void ShooterHeatControl::trigger_callback(std_msgs::msg::Float64 ::SharedPtr msg
 void ShooterHeatControl::power_heat_callback(gary_msgs::msg::PowerHeat::SharedPtr msg) {
     this->scale_factor_id1 = (static_cast<double>(msg->shooter_17mm_id1_heat) < this->heat_max_level) ? 1.0 : 0.0;
     this->scale_factor_id2 = (static_cast<double>(msg->shooter_17mm_id2_heat) < this->heat_max_level) ? 1.0 : 0.0;
+}
+
+void ShooterHeatControl::shoot_data_callback(gary_msgs::msg::ShootData::SharedPtr msg) {
+    if((this->barrel_id == 0 && msg->shooter_id == msg->SHOOTER_ID_17MM_ID1)
+    || (this->barrel_id == 1 && msg->shooter_id == msg->SHOOTER_ID_17MM_ID2)){
+        this->shoot_speed = msg->bullet_speed;
+    }else{
+        RCLCPP_WARN(this->get_logger(),"Barrel_ID cannot be matched.");
+    }
+}
+
+void ShooterHeatControl::shooter_callback(std_msgs::msg::Float64::SharedPtr msg) {
+    static std_msgs::msg::Float64 data; // memcached
+    if(this->shoot_speed <= this->barrel_max_speed_by_id[barrel_id]){
+        data.data = msg->data;
+    }else{
+        data.data -= (this->shoot_speed - this->barrel_max_speed_by_id[barrel_id]) * 263.1578947368421;
+    }
+    this->shooter_publisher->publish(data);
+}
+
+void ShooterHeatControl::robot_status_callback(gary_msgs::msg::RobotStatus::SharedPtr msg) {
+    this->barrel_max_speed_by_id[0] = msg->shooter_17mm_id1_speed_limit * 0.8f;
+    this->barrel_max_speed_by_id[1] = msg->shooter_17mm_id2_speed_limit * 0.8f;
 }
 
 
