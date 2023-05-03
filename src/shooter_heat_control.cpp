@@ -216,12 +216,14 @@ void ShooterHeatControl::shoot_data_callback(gary_msgs::msg::ShootData::SharedPt
 }
 
 void ShooterHeatControl::shooter_callback(std_msgs::msg::Float64::SharedPtr msg) {
-    static std_msgs::msg::Float64 data; // memcached
+    std_msgs::msg::Float64 data;
+    double tmp = 0.0;
     if(this->shoot_speed <= this->barrel_max_speed_by_id[barrel_id]){
-        data.data = msg->data;
+        tmp = msg->data;
     }else{
-        data.data = msg->data - ((this->shoot_speed - this->barrel_max_speed_by_id[barrel_id]) * 263.1578947368421);
+        tmp = msg->data - ((this->shoot_speed - this->barrel_max_speed_by_id[barrel_id]) * 263.1578947368421);
     }
+    data.data = (tmp>0.001) ? tmp : 0.0;
     this->shooter_publisher->publish(data);
 }
 
