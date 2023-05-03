@@ -220,7 +220,7 @@ void ShooterHeatControl::shooter_callback(std_msgs::msg::Float64::SharedPtr msg)
     if(this->shoot_speed <= this->barrel_max_speed_by_id[barrel_id]){
         data.data = msg->data;
     }else{
-        data.data -= (this->shoot_speed - this->barrel_max_speed_by_id[barrel_id]) * 263.1578947368421;
+        data.data = msg->data - ((this->shoot_speed - this->barrel_max_speed_by_id[barrel_id]) * 263.1578947368421);
     }
     this->shooter_publisher->publish(data);
 }
