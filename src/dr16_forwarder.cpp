@@ -6,6 +6,8 @@
 #include <string>
 #include <chrono>
 
+using namespace std::chrono_literals;
+
 namespace gary_shoot{
 
     using CallbackReturn = rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn;
@@ -37,6 +39,8 @@ namespace gary_shoot{
         right_switch_state = 0;
         trigger_wheel_pid_target_set = 0;
         use_auto_fire = false;
+        cover_open = false;
+        frec_factor = 1.0;
     }
 
     CallbackReturn DR16Forwarder::on_configure(const rclcpp_lifecycle::State &previous_state) {
@@ -68,6 +72,8 @@ namespace gary_shoot{
                         remote_control_topic,
                         rclcpp::SystemDefaultsQoS(),
                         std::bind(&DR16Forwarder::rc_callback,this,std::placeholders::_1), sub_options);
+
+        switch_cover_client = this->create_client<gary_msgs::srv::SwitchCover>("/switch_cover");
 
 
         this->use_auto_fire = this->get_parameter("auto_fire").as_bool();
@@ -155,10 +161,32 @@ namespace gary_shoot{
                 shooter_on = !shooter_on;
                 RCLCPP_INFO(this->get_logger(),shooter_on?"Shooter on!":"Shooter off!");
             }
-            if(trigger_on && !shooter_on){
-                trigger_on = false;
-                RCLCPP_WARN(this->get_logger(),"Trigger off!: cannot turn trigger on while shooter is off!");
+        }
+        if(msg->mouse_press_l){
+            trigger_on = true;
+        }else{
+            trigger_on = false;
+        }
+        static std::chrono::time_point<std::chrono::steady_clock> last_ctrl;
+        if(msg->key_x){
+            if(msg->key_ctrl){
+                last_ctrl = std::chrono::steady_clock::now();
+                shooter_on = false;
+            }else{
+                if(std::chrono::steady_clock::now() - last_ctrl >= 100ms){
+                    shooter_on = true;
+                }
             }
+        }
+        if(msg->key_v){
+            freq_factor = 1.0;
+        }
+        if(msg->key_b){
+            freq_factor = 0.35;
+        }
+        if(trigger_on && !shooter_on){
+            trigger_on = false;
+            RCLCPP_WARN(this->get_logger(),"Trigger off!: cannot turn trigger on while shooter is off!");
         }
         if(msg->sw_right == msg->SW_DOWN){
             if(shooter_on) {
@@ -179,7 +207,7 @@ namespace gary_shoot{
 	    if(right_switch_state == gary_msgs::msg::DR16Receiver::SW_UP) {
                 TriggerWheelOnMsg.data = this->trigger_wheel_pid_target_set;
 	    }else{
-	        TriggerWheelOnMsg.data = this->trigger_wheel_pid_target;
+	        TriggerWheelOnMsg.data = this->trigger_wheel_pid_target * freq_factor;
 	    }
         }else{
             TriggerWheelOnMsg.data = static_cast<double>(0.0f);
@@ -192,6 +220,21 @@ namespace gary_shoot{
 
         ShooterWheelOnPublisher->publish(ShooterWheelOnMsg);
         TriggerWheelOnPublisher->publish(TriggerWheelOnMsg);
+
+        if (!this->switch_cover_client->service_is_ready()) {
+            RCLCPP_WARN(this->get_logger(),
+                        "changing cover failed: service not ready.");
+            return;
+        }
+        if (this->cover_resp.wait_for(0ms) == std::future_status::ready) {
+            if (cover_resp.get()->success) {
+                RCLCPP_DEBUG(this->get_logger(), "changed cover status");
+            } else {
+                auto req = std::make_shared<gary_msgs::srv::SwitchCover::Request>();
+                req->open = cover_open;
+                this->cover_resp = this->switch_cover_client->async_send_request(req);
+            }
+        }
     }
 
     void DR16Forwarder::autoaim_callback(gary_msgs::msg::AutoAIM::SharedPtr msg) {

@@ -137,8 +137,10 @@ namespace gary_shoot {
         REVERSE_TIME = this->get_parameter("reverse_time_ms").as_int();
         use_single_shoot = this->get_parameter("single_shoot").as_bool();
         if(use_single_shoot){
-            this->switch_controller_client = this->create_client<controller_manager_msgs::srv::SwitchController>("/controller_manager_msgs/SwitchController");
-            this->list_controllers_client = this->create_client<controller_manager_msgs::srv::ListControllers>("/controller_manager_msgs/ListControllers");
+            this->switch_controller_client = this->create_client<controller_manager_msgs::srv::SwitchController>
+                    ("/controller_manager_msgs/SwitchController");
+            this->list_controllers_client = this->create_client<controller_manager_msgs::srv::ListControllers>
+                    ("/controller_manager_msgs/ListControllers");
         }
 
         RCLCPP_INFO(this->get_logger(), "configured");

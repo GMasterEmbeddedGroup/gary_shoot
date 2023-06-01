@@ -4,6 +4,7 @@
 #include "gary_msgs/msg/dr16_receiver.hpp"
 #include "std_msgs/msg/float64.hpp"
 #include "gary_msgs/msg/auto_aim.hpp"
+#include "gary_msgs/srv/switch_cover.hpp"
 #include <string>
 namespace gary_shoot{
     using CallbackReturn = rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn;
@@ -37,6 +38,9 @@ namespace gary_shoot{
         void autoaim_callback(gary_msgs::msg::AutoAIM::SharedPtr msg);
         rclcpp::Subscription<gary_msgs::msg::AutoAIM>::SharedPtr autoaim_sub;
 
+        rclcpp::Client<gary_msgs::srv::SwitchCover>::SharedPtr switch_cover_client;
+        std::shared_future<gary_msgs::srv::SwitchCover::Response::SharedPtr> cover_resp;
+
 
         void data_publisher();
 
@@ -58,5 +62,7 @@ namespace gary_shoot{
         bool shooter_on;
         bool trigger_on;
         bool use_auto_fire;
+        bool cover_open;
+        double freq_factor;
     };
 }
