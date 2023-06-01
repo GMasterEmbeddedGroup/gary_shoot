@@ -19,6 +19,7 @@ namespace gary_shoot{
         this->declare_parameter("shooter_wheel_pid_target", 8500.0f);
         this->declare_parameter("trigger_wheel_pid_target", 3000.0f);
         this->declare_parameter("autoaim_topic", "/autoaim/target");
+        this->declare_parameter("auto_fire", false);
 
         this->remote_control_topic = "/remote_control";
 
@@ -35,6 +36,7 @@ namespace gary_shoot{
         switch_state = 0;
         right_switch_state = 0;
         trigger_wheel_pid_target_set = 0;
+        if_auto_fire = false;
     }
 
     CallbackReturn DR16Forwarder::on_configure(const rclcpp_lifecycle::State &previous_state) {
@@ -67,11 +69,16 @@ namespace gary_shoot{
                         rclcpp::SystemDefaultsQoS(),
                         std::bind(&DR16Forwarder::rc_callback,this,std::placeholders::_1), sub_options);
 
-        //get autoaim_topic
-        this->autoaim_topic = this->get_parameter("autoaim_topic").as_string();
-        this->autoaim_sub = this->create_subscription<gary_msgs::msg::AutoAIM>(
-                this->autoaim_topic, rclcpp::SystemDefaultsQoS(),
-                std::bind(&DR16Forwarder::autoaim_callback, this, std::placeholders::_1));
+
+        this->if_auto_fire = this->get_parameter("auto_fire").as_bool();
+
+        if(if_auto_fire) {
+            //get autoaim_topic
+            this->autoaim_topic = this->get_parameter("autoaim_topic").as_string();
+            this->autoaim_sub = this->create_subscription<gary_msgs::msg::AutoAIM>(
+                    this->autoaim_topic, rclcpp::SystemDefaultsQoS(),
+                    std::bind(&DR16Forwarder::autoaim_callback, this, std::placeholders::_1));
+        }
 
         trigger_wheel_pid_target_set = 0;
 
@@ -188,37 +195,39 @@ namespace gary_shoot{
     }
 
     void DR16Forwarder::autoaim_callback(gary_msgs::msg::AutoAIM::SharedPtr msg) {
-        auto trigger_set_k = 0.0;
+        if(if_auto_fire){
+            auto trigger_set_k = 0.0;
 
-        //have target and use autoaim
-        if(right_switch_state == gary_msgs::msg::DR16Receiver::SW_UP) {
-            if (msg->target_id != gary_msgs::msg::AutoAIM::TARGET_ID0_NONE) {
+            //have target and use autoaim
+            if (right_switch_state == gary_msgs::msg::DR16Receiver::SW_UP) {
+                if (msg->target_id != gary_msgs::msg::AutoAIM::TARGET_ID0_NONE) {
 
-                const auto dis = msg->target_distance;
-                if(dis <= 1.0){
-                    trigger_set_k = 1;
-                }else if(dis >= 4.0){
-                    trigger_set_k = 0.4;
-                }else{
-                    trigger_set_k = (-0.2)*(dis - 1.0)+ 1;
-                }
+                    const auto dis = msg->target_distance;
+                    if (dis <= 1.0) {
+                        trigger_set_k = 1;
+                    } else if (dis >= 4.0) {
+                        trigger_set_k = 0.4;
+                    } else {
+                        trigger_set_k = (-0.2) * (dis - 1.0) + 1;
+                    }
 
-                trigger_wheel_pid_target_set = trigger_wheel_pid_target * trigger_set_k;
+                    trigger_wheel_pid_target_set = trigger_wheel_pid_target * trigger_set_k;
 
-                auto clock = rclcpp::Clock();
-                if (!trigger_on) {
-                    RCLCPP_INFO_THROTTLE(this->get_logger(), clock, 2000,
-                                         "Detected target id[%d], turning trigger on with trigger rpm[%lf] ...",
-                                         msg->target_id, trigger_wheel_pid_target_set);
-                    trigger_on = true;
-                }
-                if (!shooter_on) {
+                    auto clock = rclcpp::Clock();
+                    if (!trigger_on) {
+                        RCLCPP_INFO_THROTTLE(this->get_logger(), clock, 2000,
+                                             "Detected target id[%d], turning trigger on with trigger rpm[%lf] ...",
+                                             msg->target_id, trigger_wheel_pid_target_set);
+                        trigger_on = true;
+                    }
+                    if (!shooter_on) {
+                        trigger_on = false;
+                        RCLCPP_WARN_THROTTLE(this->get_logger(), clock, 2000,
+                                             "Trigger off!: cannot turn trigger on while shooter is off!");
+                    }
+                } else {
                     trigger_on = false;
-                    RCLCPP_WARN_THROTTLE(this->get_logger(), clock, 2000,
-                                         "Trigger off!: cannot turn trigger on while shooter is off!");
                 }
-            } else {
-                trigger_on = false;
             }
         }
     }
