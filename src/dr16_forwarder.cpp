@@ -36,7 +36,7 @@ namespace gary_shoot{
         switch_state = 0;
         right_switch_state = 0;
         trigger_wheel_pid_target_set = 0;
-        if_auto_fire = false;
+        use_auto_fire = false;
     }
 
     CallbackReturn DR16Forwarder::on_configure(const rclcpp_lifecycle::State &previous_state) {
@@ -70,9 +70,9 @@ namespace gary_shoot{
                         std::bind(&DR16Forwarder::rc_callback,this,std::placeholders::_1), sub_options);
 
 
-        this->if_auto_fire = this->get_parameter("auto_fire").as_bool();
+        this->use_auto_fire = this->get_parameter("auto_fire").as_bool();
 
-        if(if_auto_fire) {
+        if(use_auto_fire) {
             //get autoaim_topic
             this->autoaim_topic = this->get_parameter("autoaim_topic").as_string();
             this->autoaim_sub = this->create_subscription<gary_msgs::msg::AutoAIM>(
@@ -195,7 +195,7 @@ namespace gary_shoot{
     }
 
     void DR16Forwarder::autoaim_callback(gary_msgs::msg::AutoAIM::SharedPtr msg) {
-        if(if_auto_fire){
+        if(use_auto_fire){
             auto trigger_set_k = 0.0;
 
             //have target and use autoaim

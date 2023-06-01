@@ -169,7 +169,6 @@ void ShooterHeatControl::trigger_callback(std_msgs::msg::Float64 ::SharedPtr msg
                 req->barrel_id = this->barrel_id;
                 this->resp = this->switch_barrel_client->async_send_request(req);
             }
-
         }
         data.data = 0.0;
         this->trigger_publisher->publish(data);

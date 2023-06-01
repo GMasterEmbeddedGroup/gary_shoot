@@ -57,6 +57,6 @@ namespace gary_shoot{
         std::uint8_t right_switch_state;
         bool shooter_on;
         bool trigger_on;
-        bool if_auto_fire;
+        bool use_auto_fire;
     };
 }

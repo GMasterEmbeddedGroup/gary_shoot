@@ -6,6 +6,8 @@
 #include <string>
 #include <chrono>
 
+using namespace std::chrono_literals;
+
 namespace gary_shoot {
 
     using CallbackReturn = rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn;
@@ -26,6 +28,7 @@ namespace gary_shoot {
         this->declare_parameter("reverse_pid_set", -3000.0);
         this->declare_parameter("block_time_ms", 500);
         this->declare_parameter("reverse_time_ms", 500);
+        this->declare_parameter("single_shoot", true);
 
         this->shooter_wheel_receive_topic = "/shooter_wheel_controller_pid_set";
         this->trigger_wheel_receive_topic = "/trigger_wheel_controller_pid_set";
@@ -55,6 +58,11 @@ namespace gary_shoot {
         BLOCK_TIME = 500;
         REVERSE_TIME = 500;
 
+        continuously_fire_controller_on = false;
+        single_fire_controller_on = false;
+        single_shoot = true;
+        last_trigger_on = false;
+        position_changed = false;
 
         diag_objs.clear();
         real_trigger_speed = trigger_wheel_current_set;
@@ -81,6 +89,8 @@ namespace gary_shoot {
         trigger_wheel_send_topic = this->get_parameter("trigger_wheel_send_topic").as_string();
         TriggerWheelPIDPublisher =
                 create_publisher<std_msgs::msg::Float64>(trigger_wheel_send_topic, rclcpp::SystemDefaultsQoS());
+        TriggerWheelPositionPIDPublisher =
+                create_publisher<std_msgs::msg::Float64>("/trigger_position_pid/cmd", rclcpp::SystemDefaultsQoS());
 
 
         shooter_wheel_receive_topic = this->get_parameter("shooter_wheel_receive_topic").as_string();
@@ -111,6 +121,16 @@ namespace gary_shoot {
                         pid_topic,
                         rclcpp::SystemDefaultsQoS(),
                         std::bind(&ShooterController::pid_callback, this, std::placeholders::_1), sub_options);
+        this->TriggerPositionPIDSubscription =
+                this->create_subscription<gary_msgs::msg::PID>(
+                        "/trigger_position_pid/pid",
+                        rclcpp::SystemDefaultsQoS(),
+                        std::bind(&ShooterController::position_pid_callback, this, std::placeholders::_1), sub_options);
+
+        this->ControllerStateSubscription = this->create_subscription<controller_manager_msgs::msg::ControllerState>(
+                "/controller_manager_msgs/controller_state",
+                rclcpp::SystemDefaultsQoS(),
+                std::bind(&ShooterController::controller_state_callback, this, std::placeholders::_1), sub_options);
 
         reverse_pid_set = this->get_parameter("reverse_pid_set").as_double();
         diag_objs.emplace(this->get_parameter("trigger_wheel_diag_name").as_string(), false);
@@ -119,6 +139,10 @@ namespace gary_shoot {
 
         BLOCK_TIME = this->get_parameter("block_time_ms").as_int();
         REVERSE_TIME = this->get_parameter("reverse_time_ms").as_int();
+        use_single_shoot = this->get_parameter("single_shoot").as_bool();
+        if(use_single_shoot){
+            this->switch_controller_client = this->create_client<controller_manager_msgs::srv::SwitchController>("/controller_manager_msgs/SwitchController");
+        }
 
         RCLCPP_INFO(this->get_logger(), "configured");
         return CallbackReturn::SUCCESS;
@@ -146,10 +170,13 @@ namespace gary_shoot {
         RCL_UNUSED(previous_state);
         using namespace std::chrono_literals;
         timer_update = this->create_wall_timer(1000ms / this->update_freq, [this] { data_publisher(); }, this->cb_group);
-        timer_reverse = this->create_wall_timer(1000ms / 1000.0, [this] { reverse_trigger(); }, this->cb_group);
+        timer_reverse = this->create_wall_timer(1000ms / 100.0, [this] { reverse_trigger(); }, this->cb_group);
         TriggerWheelPIDPublisher->on_activate();
         RightShooterWheelPIDPublisher->on_activate();
         LeftShooterWheelPIDPublisher->on_activate();
+
+        this->last_click_time = std::chrono::steady_clock::now();
+
         RCLCPP_INFO(this->get_logger(), "activated");
         return CallbackReturn::SUCCESS;
     }
@@ -256,7 +283,68 @@ namespace gary_shoot {
         if (!zero_force) {
             LeftShooterWheelPIDPublisher->publish(LeftShooterWheelPIDMsg);
             RightShooterWheelPIDPublisher->publish(RightShooterWheelPIDMsg);
-            if(trigger_on) { TriggerWheelPIDPublisher->publish(TriggerWheelPIDMsg); }
+//            if(trigger_on) { TriggerWheelPIDPublisher->publish(TriggerWheelPIDMsg); }
+            if(trigger_on){
+                if(use_single_shoot) {  //single
+                    auto now_time = std::chrono::steady_clock::now();
+                    if (!last_trigger_on) { //just pressed
+                        last_click_time = now_time;
+                    }
+                    last_trigger_on = trigger_on;
+                    if(now_time - last_click_time <= 300ms) {
+                        if (!single_fire_controller_on) { //need switching
+                            if (!this->switch_controller_client->service_is_ready()) {
+                                RCLCPP_WARN(this->get_logger(),
+                                            "switched to rpm controller failed: service not ready.");
+                                return;
+                            }
+                            if (this->resp.wait_for(0ms) == std::future_status::ready) {
+                                if (resp.get()->ok) {
+                                    RCLCPP_INFO(this->get_logger(), "switched to rpm controller");
+                                } else {
+                                    auto req = std::make_shared<controller_manager_msgs::srv::SwitchController::Request>();
+                                    req->stop_controllers.emplace_back("trigger_pid");
+                                    req->start_controllers.emplace_back("trigger_position_pid");
+                                    req->start_asap = true;
+                                    req->strictness = req->BEST_EFFORT;
+                                    this->resp = this->switch_controller_client->async_send_request(req);
+                                }
+                            } else {
+                                return;
+                            }
+                        } else {
+                            if (!position_changed) { TriggerWheelPositionPIDMsg.data = real_position + M_PI_4; position_changed = true;}
+                            TriggerWheelPositionPIDPublisher->publish(TriggerWheelPositionPIDMsg);
+                        }
+                        return;
+                    }else{
+                        position_changed = false;
+                    }
+                }
+                if(!continuously_fire_controller_on){
+                    if (!this->switch_controller_client->service_is_ready()) {
+                        RCLCPP_WARN(this->get_logger(),
+                                    "switched to rpm controller failed: service not ready.");
+                        return;
+                    }
+                    if (this->resp.wait_for(0ms) == std::future_status::ready) {
+                        if (resp.get()->ok) {
+                            RCLCPP_INFO(this->get_logger(), "switched to rpm controller");
+                        } else {
+                            auto req = std::make_shared<controller_manager_msgs::srv::SwitchController::Request>();
+                            req->stop_controllers.emplace_back("trigger_pid");
+                            req->start_controllers.emplace_back("trigger_position_pid");
+                            req->start_asap = true;
+                            req->strictness = req->BEST_EFFORT;
+                            this->resp = this->switch_controller_client->async_send_request(req);
+                        }
+                    } else {
+                        return;
+                    }
+                } else{
+                    TriggerWheelPIDPublisher->publish(TriggerWheelPIDMsg);
+                }
+            }
         }
     }
 
@@ -321,12 +409,12 @@ namespace gary_shoot {
 
             if (std::abs(real_trigger_speed) < std::abs(trigger_wheel_current_set * 0.5) &&
                 this->block_time < BLOCK_TIME) {
-                this->block_time++;
+                this->block_time += 10;
                 this->reverse_time = 0;
                 RCLCPP_WARN_THROTTLE(this->get_logger(), clock, 1000, "Trigger Blocked.");
-            } else if (this->block_time == BLOCK_TIME && this->reverse_time < REVERSE_TIME) {
+            } else if (this->block_time >= BLOCK_TIME && this->reverse_time < REVERSE_TIME) {
                 RCLCPP_INFO_THROTTLE(this->get_logger(), clock, 1000, "Reversing Trigger...");
-                this->reverse_time++;
+                this->reverse_time += 10;
             } else {
                 this->block_time = 0;
             }
@@ -338,9 +426,19 @@ namespace gary_shoot {
         } else {
             reverse = false;
         }
-
     }
 
+    void ShooterController::controller_state_callback(controller_manager_msgs::msg::ControllerState::SharedPtr msg) {
+        if(msg->name == "trigger_pid"){
+            continuously_fire_controller_on = (msg->state == "OK");
+        }else if(msg->name == "trigger_position_pid"){
+            single_fire_controller_on = (msg->state == "OK");
+        }
+    }
+
+    void ShooterController::position_pid_callback(gary_msgs::msg::PID::SharedPtr msg) {
+        this->real_position = msg->feedback;
+    }
 
 }
 

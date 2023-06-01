@@ -4,6 +4,8 @@
 #include "std_msgs/msg/float64.hpp"
 #include "diagnostic_msgs/msg/diagnostic_array.hpp"
 #include "gary_msgs/msg/pid.hpp"
+#include "controller_manager_msgs/msg/controller_state.hpp"
+#include "controller_manager_msgs/srv/switch_controller.hpp"
 #include <string>
 #include <cmath>
 #include <chrono>
@@ -42,6 +44,8 @@ namespace gary_shoot{
         rclcpp_lifecycle::LifecyclePublisher<std_msgs::msg::Float64>::SharedPtr RightShooterWheelPIDPublisher;
         std_msgs::msg::Float64 TriggerWheelPIDMsg;
         rclcpp_lifecycle::LifecyclePublisher<std_msgs::msg::Float64>::SharedPtr TriggerWheelPIDPublisher;
+        std_msgs::msg::Float64 TriggerWheelPositionPIDMsg;
+        rclcpp_lifecycle::LifecyclePublisher<std_msgs::msg::Float64>::SharedPtr TriggerWheelPositionPIDPublisher;
 
         void shooter_callback(std_msgs::msg::Float64::SharedPtr msg);
         rclcpp::Subscription<std_msgs::msg::Float64>::SharedPtr ShooterSubscription;
@@ -51,6 +55,13 @@ namespace gary_shoot{
         rclcpp::Subscription<diagnostic_msgs::msg::DiagnosticArray>::SharedPtr DiagnosticSubscription;
         void pid_callback(gary_msgs::msg::PID::SharedPtr msg);
         rclcpp::Subscription<gary_msgs::msg::PID>::SharedPtr TriggerPIDSubscription;
+        void position_pid_callback(gary_msgs::msg::PID::SharedPtr msg);
+        rclcpp::Subscription<gary_msgs::msg::PID>::SharedPtr TriggerPositionPIDSubscription;
+        void controller_state_callback(controller_manager_msgs::msg::ControllerState::SharedPtr msg);
+        rclcpp::Subscription<controller_manager_msgs::msg::ControllerState>::SharedPtr ControllerStateSubscription;
+
+        rclcpp::Client<controller_manager_msgs::srv::SwitchController>::SharedPtr switch_controller_client;
+        std::shared_future<controller_manager_msgs::srv::SwitchController::Response::SharedPtr> resp;
 
         void data_publisher();
         void reverse_trigger();
@@ -87,9 +98,16 @@ namespace gary_shoot{
         double reverse_pid_set;
         double real_trigger_speed;
         uint8_t BLOCK_TRIGGER_SPEED_DIFF;
+        double real_position;
 
         int64_t BLOCK_TIME;
         int64_t REVERSE_TIME;
+        bool continuously_fire_controller_on;
+        bool single_fire_controller_on;
+        bool use_single_shoot;
+        std::chrono::time_point<std::chrono::steady_clock> last_click_time;
+        bool last_trigger_on;
+        bool position_changed;
 
         std::map<std::string,bool> diag_objs;
     };
