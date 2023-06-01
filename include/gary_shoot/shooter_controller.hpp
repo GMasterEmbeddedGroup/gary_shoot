@@ -4,7 +4,7 @@
 #include "std_msgs/msg/float64.hpp"
 #include "diagnostic_msgs/msg/diagnostic_array.hpp"
 #include "gary_msgs/msg/pid.hpp"
-#include "controller_manager_msgs/msg/controller_state.hpp"
+#include "controller_manager_msgs/srv/list_controllers.hpp"
 #include "controller_manager_msgs/srv/switch_controller.hpp"
 #include <string>
 #include <cmath>
@@ -57,10 +57,10 @@ namespace gary_shoot{
         rclcpp::Subscription<gary_msgs::msg::PID>::SharedPtr TriggerPIDSubscription;
         void position_pid_callback(gary_msgs::msg::PID::SharedPtr msg);
         rclcpp::Subscription<gary_msgs::msg::PID>::SharedPtr TriggerPositionPIDSubscription;
-        void controller_state_callback(controller_manager_msgs::msg::ControllerState::SharedPtr msg);
-        rclcpp::Subscription<controller_manager_msgs::msg::ControllerState>::SharedPtr ControllerStateSubscription;
 
+        rclcpp::Client<controller_manager_msgs::srv::ListControllers>::SharedPtr list_controllers_client;
         rclcpp::Client<controller_manager_msgs::srv::SwitchController>::SharedPtr switch_controller_client;
+        std::shared_future<controller_manager_msgs::srv::ListControllers::Response::SharedPtr> lc_resp;
         std::shared_future<controller_manager_msgs::srv::SwitchController::Response::SharedPtr> resp;
 
         void data_publisher();

@@ -127,10 +127,6 @@ namespace gary_shoot {
                         rclcpp::SystemDefaultsQoS(),
                         std::bind(&ShooterController::position_pid_callback, this, std::placeholders::_1), sub_options);
 
-        this->ControllerStateSubscription = this->create_subscription<controller_manager_msgs::msg::ControllerState>(
-                "/controller_manager_msgs/controller_state",
-                rclcpp::SystemDefaultsQoS(),
-                std::bind(&ShooterController::controller_state_callback, this, std::placeholders::_1), sub_options);
 
         reverse_pid_set = this->get_parameter("reverse_pid_set").as_double();
         diag_objs.emplace(this->get_parameter("trigger_wheel_diag_name").as_string(), false);
@@ -142,6 +138,7 @@ namespace gary_shoot {
         use_single_shoot = this->get_parameter("single_shoot").as_bool();
         if(use_single_shoot){
             this->switch_controller_client = this->create_client<controller_manager_msgs::srv::SwitchController>("/controller_manager_msgs/SwitchController");
+            this->list_controllers_client = this->create_client<controller_manager_msgs::srv::ListControllers>("/controller_manager_msgs/ListControllers");
         }
 
         RCLCPP_INFO(this->get_logger(), "configured");
@@ -285,6 +282,29 @@ namespace gary_shoot {
             RightShooterWheelPIDPublisher->publish(RightShooterWheelPIDMsg);
 //            if(trigger_on) { TriggerWheelPIDPublisher->publish(TriggerWheelPIDMsg); }
             if(trigger_on){
+                if (!this->list_controllers_client->service_is_ready()) {
+                    RCLCPP_WARN(this->get_logger(),
+                                "listing controllers failed: service not ready.");
+                    return;
+                }
+                if (this->lc_resp.wait_for(0ms) == std::future_status::ready) {
+                    if (!lc_resp.get()->controller.empty()) {
+                        RCLCPP_DEBUG(this->get_logger(), "listed controllers");
+                        for(auto &item: lc_resp.get()->controller){
+                            if(item.name == "trigger_pid"){
+                                this->continuously_fire_controller_on =
+                                        (item.state == "active");
+                            }
+                            if(item.name == "trigger_position_pid"){
+                                this->single_fire_controller_on =
+                                        (item.state == "active");
+                            }
+                        }
+                    } else {
+                        auto req = std::make_shared<controller_manager_msgs::srv::ListControllers::Request>();
+                        this->lc_resp = this->list_controllers_client->async_send_request(req);
+                    }
+                }
                 if(use_single_shoot) {  //single
                     auto now_time = std::chrono::steady_clock::now();
                     if (!last_trigger_on) { //just pressed
@@ -324,12 +344,12 @@ namespace gary_shoot {
                 if(!continuously_fire_controller_on){
                     if (!this->switch_controller_client->service_is_ready()) {
                         RCLCPP_WARN(this->get_logger(),
-                                    "switched to rpm controller failed: service not ready.");
+                                    "switched to pos controller failed: service not ready.");
                         return;
                     }
                     if (this->resp.wait_for(0ms) == std::future_status::ready) {
                         if (resp.get()->ok) {
-                            RCLCPP_INFO(this->get_logger(), "switched to rpm controller");
+                            RCLCPP_INFO(this->get_logger(), "switched to pos controller");
                         } else {
                             auto req = std::make_shared<controller_manager_msgs::srv::SwitchController::Request>();
                             req->stop_controllers.emplace_back("trigger_pid");
@@ -425,14 +445,6 @@ namespace gary_shoot {
 
         } else {
             reverse = false;
-        }
-    }
-
-    void ShooterController::controller_state_callback(controller_manager_msgs::msg::ControllerState::SharedPtr msg) {
-        if(msg->name == "trigger_pid"){
-            continuously_fire_controller_on = (msg->state == "OK");
-        }else if(msg->name == "trigger_position_pid"){
-            single_fire_controller_on = (msg->state == "OK");
         }
     }
 
