@@ -53,6 +53,7 @@ ament_target_dependencies(
         lifecycle_msgs
         gary_msgs
         diagnostic_msgs
+        controller_manager_msgs
 )
 ament_target_dependencies(
         dr16_forwarder
@@ -119,6 +120,7 @@ ament_target_dependencies(
         lifecycle_msgs
         gary_msgs
         diagnostic_msgs
+        controller_manager_msgs
 )
 ament_target_dependencies(
         dr16_forwarder_lib
