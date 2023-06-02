@@ -230,20 +230,29 @@ namespace gary_shoot{
         ShooterWheelOnPublisher->publish(ShooterWheelOnMsg);
         TriggerWheelOnPublisher->publish(TriggerWheelOnMsg);
 
-        if (!this->switch_cover_client->service_is_ready()) {
-            RCLCPP_WARN(this->get_logger(),
-                        "changing cover failed: service not ready.");
-            return;
+        static bool last_cover_status = false;
+        static bool cover_switched = true;
+        if(last_cover_status != cover_open){
+            cover_switched = false;
         }
-        if (this->cover_resp.wait_for(0ms) == std::future_status::ready) {
-            if (cover_resp.get()->success) {
-                RCLCPP_DEBUG(this->get_logger(), "changed cover status");
-            } else {
-                auto req = std::make_shared<gary_msgs::srv::SwitchCover::Request>();
-                req->open = cover_open;
-                this->cover_resp = this->switch_cover_client->async_send_request(req);
+        if(!cover_switched) {
+            if (!this->switch_cover_client->service_is_ready()) {
+                RCLCPP_WARN(this->get_logger(),
+                            "changing cover failed: service not ready.");
+                return;
+            }
+            if (this->cover_resp.wait_for(0ms) == std::future_status::ready) {
+                if (cover_resp.get()->success) {
+                    RCLCPP_DEBUG(this->get_logger(), "changed cover status");
+                    cover_switched = true;
+                } else {
+                    auto req = std::make_shared<gary_msgs::srv::SwitchCover::Request>();
+                    req->open = cover_open;
+                    this->cover_resp = this->switch_cover_client->async_send_request(req);
+                }
             }
         }
+        last_cover_status = cover_open;
     }
 
     void DR16Forwarder::autoaim_callback(gary_msgs::msg::AutoAIM::SharedPtr msg) {
