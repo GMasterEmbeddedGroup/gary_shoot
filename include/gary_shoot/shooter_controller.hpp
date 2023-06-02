@@ -93,7 +93,6 @@ namespace gary_shoot{
 
         int reverse_time;
         int block_time;
-        bool single_shoot;
         bool reverse;
         double reverse_pid_set;
         double real_trigger_speed;

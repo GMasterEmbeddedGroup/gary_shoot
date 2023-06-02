@@ -51,7 +51,6 @@ namespace gary_shoot {
 
         reverse_time = 0;
         block_time = 0;
-        single_shoot = false;
         reverse = false;
         reverse_pid_set = -3000.0;
         BLOCK_TRIGGER_SPEED_DIFF = 100;
@@ -60,7 +59,7 @@ namespace gary_shoot {
 
         continuously_fire_controller_on = false;
         single_fire_controller_on = false;
-        single_shoot = true;
+        use_single_shoot = true;
         last_trigger_on = false;
         position_changed = false;
 
@@ -325,13 +324,15 @@ namespace gary_shoot {
                         }
                     }
                 }
+                RCLCPP_INFO_ONCE(this->get_logger(),"%s",(use_single_shoot?"used single":"not single"));
                 if(use_single_shoot) {  //single
                     auto now_time = std::chrono::steady_clock::now();
                     if (!last_trigger_on) { //just pressed
                         last_click_time = now_time;
+                        RCLCPP_INFO(this->get_logger(),"Single!");
                     }
                     last_trigger_on = trigger_on;
-                    if(now_time - last_click_time <= 300ms) {
+                    if(now_time - last_click_time <= 3000ms) { //TODO: test a proper value
                         if (!single_fire_controller_on) { //need switching
                             if (!this->switch_controller_client->service_is_ready()) {
                                 RCLCPP_WARN(this->get_logger(),
