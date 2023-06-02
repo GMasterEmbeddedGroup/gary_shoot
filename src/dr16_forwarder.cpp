@@ -40,7 +40,7 @@ namespace gary_shoot{
         trigger_wheel_pid_target_set = 0;
         use_auto_fire = false;
         cover_open = false;
-        frec_factor = 1.0;
+        freq_factor = 1.0;
     }
 
     CallbackReturn DR16Forwarder::on_configure(const rclcpp_lifecycle::State &previous_state) {
@@ -151,7 +151,6 @@ namespace gary_shoot{
     }
 
     void DR16Forwarder::rc_callback(gary_msgs::msg::DR16Receiver::SharedPtr msg) {
-        // I know "msg" should be made const, but it somehow goes error, so do not change it.
         switch_state = msg->sw_left;
         if(prev_switch_state == msg->SW_MID) {
             if(switch_state == msg->SW_DOWN){
@@ -175,6 +174,16 @@ namespace gary_shoot{
             }else{
                 if(std::chrono::steady_clock::now() - last_ctrl >= 100ms){
                     shooter_on = true;
+                }
+            }
+        }
+        if(msg->key_r){
+            if(msg->key_ctrl){
+                last_ctrl = std::chrono::steady_clock::now();
+                cover_open = false;
+            }else{
+                if(std::chrono::steady_clock::now() - last_ctrl >= 100ms){
+                    cover_open = true;
                 }
             }
         }

@@ -173,6 +173,7 @@ namespace gary_shoot {
         TriggerWheelPIDPublisher->on_activate();
         RightShooterWheelPIDPublisher->on_activate();
         LeftShooterWheelPIDPublisher->on_activate();
+        TriggerWheelPositionPIDPublisher->on_activate();
 
         this->last_click_time = std::chrono::steady_clock::now();
 
@@ -188,6 +189,10 @@ namespace gary_shoot {
         TriggerWheelPIDPublisher->on_deactivate();
         RightShooterWheelPIDPublisher->on_deactivate();
         LeftShooterWheelPIDPublisher->on_deactivate();
+        if(TriggerWheelPositionPIDPublisher.get()!= nullptr){TriggerWheelPositionPIDPublisher->on_deactivate();}
+        if(TriggerPositionPIDSubscription.get() != nullptr){TriggerPositionPIDSubscription.reset();}
+        if(list_controllers_client.get()!= nullptr){list_controllers_client.reset();}
+        if(switch_controller_client.get()!= nullptr){switch_controller_client.reset();}
         TriggerSubscription.reset();
         ShooterSubscription.reset();
         TriggerPIDSubscription.reset();
@@ -208,6 +213,11 @@ namespace gary_shoot {
         if (ShooterSubscription.get() != nullptr) ShooterSubscription.reset();
         if (TriggerPIDSubscription.get() != nullptr) TriggerPIDSubscription.reset();
 
+        if(TriggerWheelPositionPIDPublisher.get()!= nullptr){TriggerWheelPositionPIDPublisher->on_deactivate();}
+        if(TriggerPositionPIDSubscription.get() != nullptr){TriggerPositionPIDSubscription.reset();}
+        if(list_controllers_client.get()!= nullptr){list_controllers_client.reset();}
+        if(switch_controller_client.get()!= nullptr){switch_controller_client.reset();}
+
         diag_objs.clear();
 
         RCLCPP_INFO(this->get_logger(), "shutdown");
@@ -225,6 +235,11 @@ namespace gary_shoot {
         if (TriggerSubscription.get() != nullptr) TriggerSubscription.reset();
         if (ShooterSubscription.get() != nullptr) ShooterSubscription.reset();
         if (TriggerPIDSubscription.get() != nullptr) TriggerPIDSubscription.reset();
+
+        if(TriggerWheelPositionPIDPublisher.get()!= nullptr){TriggerWheelPositionPIDPublisher->on_deactivate();}
+        if(TriggerPositionPIDSubscription.get() != nullptr){TriggerPositionPIDSubscription.reset();}
+        if(list_controllers_client.get()!= nullptr){list_controllers_client.reset();}
+        if(switch_controller_client.get()!= nullptr){switch_controller_client.reset();}
 
         diag_objs.clear();
 
