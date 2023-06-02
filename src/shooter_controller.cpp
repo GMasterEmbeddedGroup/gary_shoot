@@ -304,23 +304,25 @@ namespace gary_shoot {
                                 "listing controllers failed: service not ready.");
                     return;
                 }
-                if (this->lc_resp.wait_for(0ms) == std::future_status::ready) {
-                    auto controllers = lc_resp.get()->controller;
-                    if (!controllers.empty()) {
-                        RCLCPP_DEBUG(this->get_logger(), "listed controllers");
-                        for(auto &item: controllers){
-                            if(item.name == "trigger_pid"){
-                                this->continuously_fire_controller_on =
-                                        (item.state == "active");
+                if(lc_resp.valid()) {
+                    if (this->lc_resp.wait_for(0ms) == std::future_status::ready) {
+                        auto controllers = lc_resp.get()->controller;
+                        if (!controllers.empty()) {
+                            RCLCPP_DEBUG(this->get_logger(), "listed controllers");
+                            for (auto &item: controllers) {
+                                if (item.name == "trigger_pid") {
+                                    this->continuously_fire_controller_on =
+                                            (item.state == "active");
+                                }
+                                if (item.name == "trigger_position_pid") {
+                                    this->single_fire_controller_on =
+                                            (item.state == "active");
+                                }
                             }
-                            if(item.name == "trigger_position_pid"){
-                                this->single_fire_controller_on =
-                                        (item.state == "active");
-                            }
+                        } else {
+                            auto req = std::make_shared<controller_manager_msgs::srv::ListControllers::Request>();
+                            this->lc_resp = this->list_controllers_client->async_send_request(req);
                         }
-                    } else {
-                        auto req = std::make_shared<controller_manager_msgs::srv::ListControllers::Request>();
-                        this->lc_resp = this->list_controllers_client->async_send_request(req);
                     }
                 }
                 if(use_single_shoot) {  //single
@@ -337,19 +339,21 @@ namespace gary_shoot {
                                 return;
                             }
                             RCLCPP_INFO(this->get_logger(),"trigger switching to controller: pos");
-                            if (this->resp.wait_for(0ms) == std::future_status::ready) {
-                                if (resp.get()->ok) {
-                                    RCLCPP_INFO(this->get_logger(), "switched to pos controller");
+                            if(resp.valid()) {
+                                if (this->resp.wait_for(0ms) == std::future_status::ready) {
+                                    if (resp.get()->ok) {
+                                        RCLCPP_INFO(this->get_logger(), "switched to pos controller");
+                                    } else {
+                                        auto req = std::make_shared<controller_manager_msgs::srv::SwitchController::Request>();
+                                        req->stop_controllers.emplace_back("trigger_pid");
+                                        req->start_controllers.emplace_back("trigger_position_pid");
+                                        req->start_asap = true;
+                                        req->strictness = req->BEST_EFFORT;
+                                        this->resp = this->switch_controller_client->async_send_request(req);
+                                    }
                                 } else {
-                                    auto req = std::make_shared<controller_manager_msgs::srv::SwitchController::Request>();
-                                    req->stop_controllers.emplace_back("trigger_pid");
-                                    req->start_controllers.emplace_back("trigger_position_pid");
-                                    req->start_asap = true;
-                                    req->strictness = req->BEST_EFFORT;
-                                    this->resp = this->switch_controller_client->async_send_request(req);
+                                    return;
                                 }
-                            } else {
-                                return;
                             }
                         } else {
                             if (!position_changed) { TriggerWheelPositionPIDMsg.data = real_position + M_PI_4; position_changed = true;}
@@ -367,19 +371,21 @@ namespace gary_shoot {
                         return;
                     }
                     RCLCPP_INFO(this->get_logger(),"trigger switching to controller: rpm");
-                    if (this->resp.wait_for(0ms) == std::future_status::ready) {
-                        if (resp.get()->ok) {
-                            RCLCPP_INFO(this->get_logger(), "switched to rpm controller");
+                    if(resp.valid()) {
+                        if (this->resp.wait_for(0ms) == std::future_status::ready) {
+                            if (resp.get()->ok) {
+                                RCLCPP_INFO(this->get_logger(), "switched to rpm controller");
+                            } else {
+                                auto req = std::make_shared<controller_manager_msgs::srv::SwitchController::Request>();
+                                req->stop_controllers.emplace_back("trigger_position_pid");
+                                req->start_controllers.emplace_back("trigger_pid");
+                                req->start_asap = true;
+                                req->strictness = req->BEST_EFFORT;
+                                this->resp = this->switch_controller_client->async_send_request(req);
+                            }
                         } else {
-                            auto req = std::make_shared<controller_manager_msgs::srv::SwitchController::Request>();
-                            req->stop_controllers.emplace_back("trigger_position_pid");
-                            req->start_controllers.emplace_back("trigger_pid");
-                            req->start_asap = true;
-                            req->strictness = req->BEST_EFFORT;
-                            this->resp = this->switch_controller_client->async_send_request(req);
+                            return;
                         }
-                    } else {
-                        return;
                     }
                 } else{
                     TriggerWheelPIDPublisher->publish(TriggerWheelPIDMsg);

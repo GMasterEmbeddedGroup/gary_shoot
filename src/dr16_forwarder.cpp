@@ -246,14 +246,16 @@ namespace gary_shoot{
                             "changing cover failed: service not ready.");
                 return;
             }
-            if (this->cover_resp.wait_for(0ms) == std::future_status::ready) {
-                if (cover_resp.get()->success) {
-                    RCLCPP_DEBUG(this->get_logger(), "changed cover status");
-                    cover_switched = true;
-                } else {
-                    auto req = std::make_shared<gary_msgs::srv::SwitchCover::Request>();
-                    req->open = cover_open;
-                    this->cover_resp = this->switch_cover_client->async_send_request(req);
+            if(cover_resp.valid()) {
+                if (this->cover_resp.wait_for(0ms) == std::future_status::ready) {
+                    if (cover_resp.get()->success) {
+                        RCLCPP_DEBUG(this->get_logger(), "changed cover status");
+                        cover_switched = true;
+                    } else {
+                        auto req = std::make_shared<gary_msgs::srv::SwitchCover::Request>();
+                        req->open = cover_open;
+                        this->cover_resp = this->switch_cover_client->async_send_request(req);
+                    }
                 }
             }
         }
