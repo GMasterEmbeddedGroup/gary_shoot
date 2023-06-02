@@ -332,12 +332,13 @@ namespace gary_shoot {
                         if (!single_fire_controller_on) { //need switching
                             if (!this->switch_controller_client->service_is_ready()) {
                                 RCLCPP_WARN(this->get_logger(),
-                                            "switched to rpm controller failed: service not ready.");
+                                            "switched to pos controller failed: service not ready.");
                                 return;
                             }
+                            RCLCPP_INFO(this->get_logger(),"trigger switching to controller: pos");
                             if (this->resp.wait_for(0ms) == std::future_status::ready) {
                                 if (resp.get()->ok) {
-                                    RCLCPP_INFO(this->get_logger(), "switched to rpm controller");
+                                    RCLCPP_INFO(this->get_logger(), "switched to pos controller");
                                 } else {
                                     auto req = std::make_shared<controller_manager_msgs::srv::SwitchController::Request>();
                                     req->stop_controllers.emplace_back("trigger_pid");
@@ -361,16 +362,17 @@ namespace gary_shoot {
                 if(!continuously_fire_controller_on){
                     if (!this->switch_controller_client->service_is_ready()) {
                         RCLCPP_WARN(this->get_logger(),
-                                    "switched to pos controller failed: service not ready.");
+                                    "switched to rpm controller failed: service not ready.");
                         return;
                     }
+                    RCLCPP_INFO(this->get_logger(),"trigger switching to controller: rpm");
                     if (this->resp.wait_for(0ms) == std::future_status::ready) {
                         if (resp.get()->ok) {
-                            RCLCPP_INFO(this->get_logger(), "switched to pos controller");
+                            RCLCPP_INFO(this->get_logger(), "switched to rpm controller");
                         } else {
                             auto req = std::make_shared<controller_manager_msgs::srv::SwitchController::Request>();
-                            req->stop_controllers.emplace_back("trigger_pid");
-                            req->start_controllers.emplace_back("trigger_position_pid");
+                            req->stop_controllers.emplace_back("trigger_position_pid");
+                            req->start_controllers.emplace_back("trigger_pid");
                             req->start_asap = true;
                             req->strictness = req->BEST_EFFORT;
                             this->resp = this->switch_controller_client->async_send_request(req);
@@ -433,7 +435,9 @@ namespace gary_shoot {
     }
 
     void ShooterController::reverse_trigger() {
-
+        if(single_fire_controller_on){
+            return;
+        }
         if (shooter_on && trigger_on) {
             if (this->block_time < BLOCK_TIME) {
                 reverse = false;
