@@ -161,10 +161,15 @@ namespace gary_shoot{
                 RCLCPP_INFO(this->get_logger(),shooter_on?"Shooter on!":"Shooter off!");
             }
         }
+        static bool mouse_being_used = false;
         if(msg->mouse_press_l){
             trigger_on = true;
+            mouse_being_used = true;
         }else{
-            trigger_on = false;
+            if(mouse_being_used) {
+                trigger_on = false;
+                mouse_being_used = false;
+            }
         }
         static std::chrono::time_point<std::chrono::steady_clock> last_ctrl;
         if(msg->key_x){
