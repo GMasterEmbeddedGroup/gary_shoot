@@ -305,9 +305,10 @@ namespace gary_shoot {
                     return;
                 }
                 if (this->lc_resp.wait_for(0ms) == std::future_status::ready) {
-                    if (!lc_resp.get()->controller.empty()) {
+                    auto controllers = lc_resp.get()->controller;
+                    if (!controllers.empty()) {
                         RCLCPP_DEBUG(this->get_logger(), "listed controllers");
-                        for(auto &item: lc_resp.get()->controller){
+                        for(auto &item: controllers){
                             if(item.name == "trigger_pid"){
                                 this->continuously_fire_controller_on =
                                         (item.state == "active");
