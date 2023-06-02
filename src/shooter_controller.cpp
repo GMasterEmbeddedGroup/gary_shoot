@@ -138,9 +138,9 @@ namespace gary_shoot {
         use_single_shoot = this->get_parameter("single_shoot").as_bool();
         if(use_single_shoot){
             this->switch_controller_client = this->create_client<controller_manager_msgs::srv::SwitchController>
-                    ("/controller_manager_msgs/SwitchController");
+                    ("/controller_manager/switch_controller");
             this->list_controllers_client = this->create_client<controller_manager_msgs::srv::ListControllers>
-                    ("/controller_manager_msgs/ListControllers");
+                    ("/controller_manager/list_controllers");
         }
 
         RCLCPP_INFO(this->get_logger(), "configured");
