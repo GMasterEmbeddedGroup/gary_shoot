@@ -182,6 +182,23 @@ namespace gary_shoot{
                 }
             }
         }
+        static bool target_buff = false;
+        if(msg->key_z){
+            static auto last_factor = freq_factor;
+            if(msg->key_ctrl){
+                last_ctrl = std::chrono::steady_clock::now();
+                freq_factor = last_factor;
+                target_buff = false;
+            }else{
+                if(std::chrono::steady_clock::now() - last_ctrl >= 100ms){
+                    if(!target_buff) {
+                        last_factor = freq_factor;
+                        target_buff = true;
+                    }
+                    freq_factor = 0.15;
+                }
+            }
+        }
         if(msg->key_r){
             if(msg->key_ctrl){
                 last_ctrl = std::chrono::steady_clock::now();
