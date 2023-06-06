@@ -197,6 +197,7 @@ namespace gary_shoot{
 
                 if(vision_mode != VISION_MODE::MODE_ARMOR){
                     vision_switched = false;
+                    vision_mode = VISION_MODE::MODE_ARMOR;
                 }
             }else{
                 if(std::chrono::steady_clock::now() - last_ctrl >= 100ms){
@@ -207,8 +208,9 @@ namespace gary_shoot{
                     freq_factor = 0.15;
                 }
 
-                if(vision_mode != VISION_MODE::MODE_TAG){
+                if(vision_mode != VISION_MODE::MODE_SMALL){
                     vision_switched = false;
+                    vision_mode = VISION_MODE::MODE_SMALL;
                 }
             }
         }
