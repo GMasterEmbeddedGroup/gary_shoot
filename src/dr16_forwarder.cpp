@@ -214,32 +214,6 @@ namespace gary_shoot{
                 }
             }
         }
-        if(vision_switching){
-            if (this->vision_resp.wait_for(0ms) == std::future_status::ready) {
-                if (vision_resp.get()->succ) {
-                    RCLCPP_DEBUG(this->get_logger(), "changed vision status");
-                    vision_switched = true;
-                    vision_switching = false;
-                } else {
-                    auto req = std::make_shared<gary_msgs::srv::VisionModeSwitch::Request>();
-                    req->mode = vision_mode;
-                    this->vision_resp = this->switch_vision_client->async_send_request(req);
-                }
-            }
-        }
-        if(!vision_switched) {
-            if(!vision_switching) {
-                if (!this->switch_vision_client->service_is_ready()) {
-                    RCLCPP_WARN(this->get_logger(),
-                                "changing vision failed: service not ready.");
-                    return;
-                }
-                auto req = std::make_shared<gary_msgs::srv::VisionModeSwitch::Request>();
-                req->mode = vision_mode;
-                this->vision_resp = this->switch_vision_client->async_send_request(req);
-                vision_switching = true;
-            }
-        }
         if(msg->key_r){
             if(msg->key_ctrl){
                 last_ctrl = std::chrono::steady_clock::now();
