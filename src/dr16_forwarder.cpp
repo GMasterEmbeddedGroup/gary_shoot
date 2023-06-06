@@ -74,6 +74,7 @@ namespace gary_shoot{
                         std::bind(&DR16Forwarder::rc_callback,this,std::placeholders::_1), sub_options);
 
         switch_cover_client = this->create_client<gary_msgs::srv::SwitchCover>("/switch_cover");
+        switch_vision_client = this->create_client<gary_msgs::srv::VisionModeSwitch>("/vision/service");
 
 
         this->use_auto_fire = this->get_parameter("auto_fire").as_bool();
