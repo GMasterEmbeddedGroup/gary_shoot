@@ -5,6 +5,7 @@
 #include "std_msgs/msg/float64.hpp"
 #include "gary_msgs/msg/auto_aim.hpp"
 #include "gary_msgs/srv/switch_cover.hpp"
+#include "gary_msgs/srv/vision_mode_switch.hpp"
 #include <string>
 namespace gary_shoot{
     using CallbackReturn = rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn;
@@ -40,6 +41,9 @@ namespace gary_shoot{
 
         rclcpp::Client<gary_msgs::srv::SwitchCover>::SharedPtr switch_cover_client;
         std::shared_future<gary_msgs::srv::SwitchCover::Response::SharedPtr> cover_resp;
+
+        rclcpp::Client<gary_msgs::srv::VisionModeSwitch>::SharedPtr switch_vision_client;
+        std::shared_future<gary_msgs::srv::VisionModeSwitch::Response::SharedPtr> vision_resp;
 
 
         void data_publisher();

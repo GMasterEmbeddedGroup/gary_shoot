@@ -182,6 +182,11 @@ namespace gary_shoot{
                 }
             }
         }
+
+        static bool vision_switched = true;
+        static bool vision_switching = false;
+        using VISION_MODE = gary_msgs::srv::VisionModeSwitch::Request const;
+        static uint8_t vision_mode = VISION_MODE::MODE_ARMOR;
         static bool target_buff = false;
         if(msg->key_z){
             static auto last_factor = freq_factor;
@@ -189,6 +194,10 @@ namespace gary_shoot{
                 last_ctrl = std::chrono::steady_clock::now();
                 freq_factor = last_factor;
                 target_buff = false;
+
+                if(vision_mode != VISION_MODE::MODE_ARMOR){
+                    vision_switched = false;
+                }
             }else{
                 if(std::chrono::steady_clock::now() - last_ctrl >= 100ms){
                     if(!target_buff) {
@@ -197,6 +206,36 @@ namespace gary_shoot{
                     }
                     freq_factor = 0.15;
                 }
+
+                if(vision_mode != VISION_MODE::MODE_TAG){
+                    vision_switched = false;
+                }
+            }
+        }
+        if(vision_switching){
+            if (this->vision_resp.wait_for(0ms) == std::future_status::ready) {
+                if (vision_resp.get()->succ) {
+                    RCLCPP_DEBUG(this->get_logger(), "changed vision status");
+                    vision_switched = true;
+                    vision_switching = false;
+                } else {
+                    auto req = std::make_shared<gary_msgs::srv::VisionModeSwitch::Request>();
+                    req->mode = vision_mode;
+                    this->vision_resp = this->switch_vision_client->async_send_request(req);
+                }
+            }
+        }
+        if(!vision_switched) {
+            if(!vision_switching) {
+                if (!this->switch_vision_client->service_is_ready()) {
+                    RCLCPP_WARN(this->get_logger(),
+                                "changing vision failed: service not ready.");
+                    return;
+                }
+                auto req = std::make_shared<gary_msgs::srv::VisionModeSwitch::Request>();
+                req->mode = vision_mode;
+                this->vision_resp = this->switch_vision_client->async_send_request(req);
+                vision_switching = true;
             }
         }
         if(msg->key_r){
@@ -254,26 +293,34 @@ namespace gary_shoot{
 
         static bool last_cover_status = false;
         static bool cover_switched = true;
+        static bool cover_switching = false;
         if(last_cover_status != cover_open){
             cover_switched = false;
         }
-        if(!cover_switched) {
-            if (!this->switch_cover_client->service_is_ready()) {
-                RCLCPP_WARN(this->get_logger(),
-                            "changing cover failed: service not ready.");
-                return;
-            }
-            if(cover_resp.valid()) {
-                if (this->cover_resp.wait_for(0ms) == std::future_status::ready) {
-                    if (cover_resp.get()->success) {
-                        RCLCPP_DEBUG(this->get_logger(), "changed cover status");
-                        cover_switched = true;
-                    } else {
-                        auto req = std::make_shared<gary_msgs::srv::SwitchCover::Request>();
-                        req->open = cover_open;
-                        this->cover_resp = this->switch_cover_client->async_send_request(req);
-                    }
+        if(cover_switching){
+            if (this->cover_resp.wait_for(0ms) == std::future_status::ready) {
+                if (cover_resp.get()->success) {
+                    RCLCPP_DEBUG(this->get_logger(), "changed cover status");
+                    cover_switched = true;
+                    cover_switching = false;
+                } else {
+                    auto req = std::make_shared<gary_msgs::srv::SwitchCover::Request>();
+                    req->open = cover_open;
+                    this->cover_resp = this->switch_cover_client->async_send_request(req);
                 }
+            }
+        }
+        if(!cover_switched) {
+            if(!cover_switching) {
+                if (!this->switch_cover_client->service_is_ready()) {
+                    RCLCPP_WARN(this->get_logger(),
+                                "changing cover failed: service not ready.");
+                    return;
+                }
+                auto req = std::make_shared<gary_msgs::srv::SwitchCover::Request>();
+                req->open = cover_open;
+                this->cover_resp = this->switch_cover_client->async_send_request(req);
+                cover_switching = true;
             }
         }
         last_cover_status = cover_open;
