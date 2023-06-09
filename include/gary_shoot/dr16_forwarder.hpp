@@ -4,9 +4,11 @@
 #include "gary_msgs/msg/dr16_receiver.hpp"
 #include "std_msgs/msg/float64.hpp"
 #include "gary_msgs/msg/auto_aim.hpp"
+#include "gary_msgs/msg/client_command.hpp"
 #include "gary_msgs/srv/switch_cover.hpp"
 #include "gary_msgs/srv/vision_mode_switch.hpp"
 #include <string>
+#include <chrono>
 namespace gary_shoot{
     using CallbackReturn = rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn;
     class DR16Forwarder : public rclcpp_lifecycle::LifecycleNode {
@@ -39,6 +41,9 @@ namespace gary_shoot{
         void autoaim_callback(gary_msgs::msg::AutoAIM::SharedPtr msg);
         rclcpp::Subscription<gary_msgs::msg::AutoAIM>::SharedPtr autoaim_sub;
 
+        void client_callback(gary_msgs::msg::ClientCommand::SharedPtr msg);
+        rclcpp::Subscription<gary_msgs::msg::ClientCommand>::SharedPtr client_sub;
+
         rclcpp::Client<gary_msgs::srv::SwitchCover>::SharedPtr switch_cover_client;
         std::shared_future<gary_msgs::srv::SwitchCover::Response::SharedPtr> cover_resp;
 
@@ -68,5 +73,7 @@ namespace gary_shoot{
         bool use_auto_fire;
         bool cover_open;
         double freq_factor;
+
+        std::chrono::time_point<std::chrono::steady_clock> stop_shoot_pressed_time_point;
     };
 }

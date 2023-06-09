@@ -41,6 +41,7 @@ namespace gary_shoot{
         use_auto_fire = false;
         cover_open = false;
         freq_factor = 1.0;
+        stop_shoot_pressed_time_point = std::chrono::steady_clock::now();
     }
 
     CallbackReturn DR16Forwarder::on_configure(const rclcpp_lifecycle::State &previous_state) {
@@ -85,6 +86,10 @@ namespace gary_shoot{
             this->autoaim_sub = this->create_subscription<gary_msgs::msg::AutoAIM>(
                     this->autoaim_topic, rclcpp::SystemDefaultsQoS(),
                     std::bind(&DR16Forwarder::autoaim_callback, this, std::placeholders::_1));
+
+            this->client_sub = this->create_subscription<gary_msgs::msg::ClientCommand>(
+                    "/referee/client_command", rclcpp::SystemDefaultsQoS(),
+                    std::bind(&DR16Forwarder::client_callback, this, std::placeholders::_1));
         }
 
         trigger_wheel_pid_target_set = 0;
@@ -100,6 +105,8 @@ namespace gary_shoot{
         if(TriggerWheelOnPublisher.get() != nullptr) TriggerWheelOnPublisher.reset();
         if(ShooterWheelOnPublisher.get() != nullptr) ShooterWheelOnPublisher.reset();
         if(RemoteControlSubscription.get() != nullptr) RemoteControlSubscription.reset();
+        if(client_sub.get() != nullptr) client_sub.reset();
+        if(autoaim_sub.get() != nullptr) autoaim_sub.reset();
 
         RCLCPP_INFO(this->get_logger(), "cleaned up");
         return CallbackReturn::SUCCESS;
@@ -122,6 +129,8 @@ namespace gary_shoot{
         TriggerWheelOnPublisher->on_deactivate();
         ShooterWheelOnPublisher->on_deactivate();
         RemoteControlSubscription.reset();
+        if(client_sub.get() != nullptr) client_sub.reset();
+        if(autoaim_sub.get() != nullptr) autoaim_sub.reset();
 
         RCLCPP_INFO(this->get_logger(), "deactivated");
         return CallbackReturn::SUCCESS;
@@ -134,6 +143,8 @@ namespace gary_shoot{
         if(TriggerWheelOnPublisher.get() != nullptr) TriggerWheelOnPublisher.reset();
         if(ShooterWheelOnPublisher.get() != nullptr) ShooterWheelOnPublisher.reset();
         if(RemoteControlSubscription.get() != nullptr) RemoteControlSubscription.reset();
+        if(client_sub.get() != nullptr) client_sub.reset();
+        if(autoaim_sub.get() != nullptr) autoaim_sub.reset();
 
         RCLCPP_INFO(this->get_logger(), "shutdown");
         return CallbackReturn::SUCCESS;
@@ -146,6 +157,8 @@ namespace gary_shoot{
         if(TriggerWheelOnPublisher.get() != nullptr) TriggerWheelOnPublisher.reset();
         if(ShooterWheelOnPublisher.get() != nullptr) ShooterWheelOnPublisher.reset();
         if(RemoteControlSubscription.get() != nullptr) RemoteControlSubscription.reset();
+        if(client_sub.get() != nullptr) client_sub.reset();
+        if(autoaim_sub.get() != nullptr) autoaim_sub.reset();
 
         RCLCPP_ERROR(this->get_logger(), "Error happened");
         return CallbackReturn::SUCCESS;
@@ -276,12 +289,19 @@ namespace gary_shoot{
     }
 
     void DR16Forwarder::data_publisher() {
+        using namespace std::chrono_literals;
+        auto now_time_point = std::chrono::steady_clock::now();
+        if(use_auto_fire && (now_time_point - this->stop_shoot_pressed_time_point <= 10s)){
+            this->trigger_on = false;
+            RCLCPP_INFO(this->get_logger(),"Trigger off due to key pressed!");
+        }
+
         if(this->trigger_on && this->shooter_on){
-	    if(right_switch_state == gary_msgs::msg::DR16Receiver::SW_UP) {
-                TriggerWheelOnMsg.data = this->trigger_wheel_pid_target_set;
-	    }else{
-	        TriggerWheelOnMsg.data = this->trigger_wheel_pid_target * freq_factor;
-	    }
+            if(right_switch_state == gary_msgs::msg::DR16Receiver::SW_UP) {
+                    TriggerWheelOnMsg.data = this->trigger_wheel_pid_target_set;
+            }else{
+                TriggerWheelOnMsg.data = this->trigger_wheel_pid_target * freq_factor;
+            }
         }else{
             TriggerWheelOnMsg.data = static_cast<double>(0.0f);
         }
@@ -293,6 +313,10 @@ namespace gary_shoot{
 
         ShooterWheelOnPublisher->publish(ShooterWheelOnMsg);
         TriggerWheelOnPublisher->publish(TriggerWheelOnMsg);
+
+
+
+
 
         static bool last_cover_status = false;
         static bool cover_switched = true;
@@ -364,6 +388,13 @@ namespace gary_shoot{
                     trigger_on = false;
                 }
             }
+        }
+    }
+
+    void DR16Forwarder::client_callback(gary_msgs::msg::ClientCommand::SharedPtr msg) {
+        if(msg->keyboard_key_pressed == 'X') {
+            this->stop_shoot_pressed_time_point = std::chrono::steady_clock::now();
+            RCLCPP_INFO(this->get_logger(), "Received stop shooting msg.");
         }
     }
 }
