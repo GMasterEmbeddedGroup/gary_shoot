@@ -35,6 +35,9 @@ namespace gary_shoot{
         std_msgs::msg::Float64 SwitcherPositionPIDMsg;
         rclcpp_lifecycle::LifecyclePublisher<std_msgs::msg::Float64>::SharedPtr SwitcherPositionPIDPublisher;
 
+        void pid_callback(gary_msgs::msg::PID::SharedPtr msg);
+        rclcpp::Subscription<gary_msgs::msg::PID>::SharedPtr SwitchingPIDSubscription;
+
         rclcpp::Service<gary_msgs::srv::SwitchBarrel>::SharedPtr BarrelSwitchService;
         void switch_srv_callback(const std::shared_ptr<gary_msgs::srv::SwitchBarrel::Request> request,
                  std::shared_ptr<gary_msgs::srv::SwitchBarrel::Response> response);
@@ -56,6 +59,7 @@ namespace gary_shoot{
 
         double SWITCH_TIME;
         double DELAY_TIME;
+        double current_pos;
 //        void setzero();
 
 //        double tolerable_diff;

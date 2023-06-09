@@ -28,7 +28,7 @@ namespace gary_shoot {
 
         SWITCH_TIME = 350.0;
         DELAY_TIME = 300.0;
-
+        current_pos = 0.0;
 //        this->declare_parameter("tolerable_diff", M_PI_4 / 4);
 //        this->tolerable_diff = M_PI_4 / 4;
 
@@ -54,6 +54,12 @@ namespace gary_shoot {
 //        this->position.emplace(0,this->get_parameter("barrel_0_position").as_double());
 //        this->position.emplace(1,this->get_parameter("barrel_1_position").as_double());
 
+        this->SwitchingPIDSubscription =
+                this->create_subscription<gary_msgs::msg::PID>(
+                        "/barrel_switch_position/pid",
+                        rclcpp::SystemDefaultsQoS(),
+                        std::bind(&BarrelSwitcher::pid_callback, this, std::placeholders::_1));
+
         SwitcherEffortPIDPublisher = create_publisher<std_msgs::msg::Float64>("/barrel_switch_pid_effort/cmd",rclcpp::SystemDefaultsQoS());
 //        SwitcherPositionPIDPublisher = create_publisher<std_msgs::msg::Float64>("/barrel_switch_pid_position/cmd",rclcpp::SystemDefaultsQoS());
 
@@ -73,6 +79,7 @@ namespace gary_shoot {
 
         if(this->SwitcherEffortPIDPublisher.get()!= nullptr) SwitcherEffortPIDPublisher.reset();
         if(BarrelSwitchService.get() != nullptr) BarrelSwitchService.reset();
+        if (SwitchingPIDSubscription.get() != nullptr) SwitchingPIDSubscription.reset();
 
         RCLCPP_INFO(this->get_logger(), "cleaned up");
         return CallbackReturn::SUCCESS;
@@ -96,6 +103,7 @@ namespace gary_shoot {
 
         if(this->SwitcherEffortPIDPublisher.get()!= nullptr) SwitcherEffortPIDPublisher.reset();
         if(BarrelSwitchService.get() != nullptr) BarrelSwitchService.reset();
+        if (SwitchingPIDSubscription.get() != nullptr) SwitchingPIDSubscription.reset();
 
         RCLCPP_INFO(this->get_logger(), "deactivated");
         return CallbackReturn::SUCCESS;
@@ -106,6 +114,7 @@ namespace gary_shoot {
 
         if(this->SwitcherEffortPIDPublisher.get()!= nullptr) SwitcherEffortPIDPublisher.reset();
         if(BarrelSwitchService.get() != nullptr) BarrelSwitchService.reset();
+        if (SwitchingPIDSubscription.get() != nullptr) SwitchingPIDSubscription.reset();
 
         RCLCPP_INFO(this->get_logger(), "shutdown");
         return CallbackReturn::SUCCESS;
@@ -116,6 +125,7 @@ namespace gary_shoot {
 
         if(this->SwitcherEffortPIDPublisher.get()!= nullptr) SwitcherEffortPIDPublisher.reset();
         if(BarrelSwitchService.get() != nullptr) BarrelSwitchService.reset();
+        if (SwitchingPIDSubscription.get() != nullptr) SwitchingPIDSubscription.reset();
 
         RCLCPP_ERROR(this->get_logger(), "Error happened");
         return CallbackReturn::SUCCESS;
@@ -141,9 +151,8 @@ namespace gary_shoot {
             }
             switched = true;
         }
-
-        response->success = !switching;
-
+        double threshold[2] = {0.0,0.0};
+        response->success = switched?(current_pos <= threshold[(int)switched]):(current_pos >= threshold[(int)switched]);
     }
 
     void BarrelSwitcher::publisher() {
@@ -188,6 +197,10 @@ namespace gary_shoot {
             RCLCPP_DEBUG_THROTTLE(this->get_logger(), clock, 100, "setting: %lf", SwitcherEffortPIDMsg.data);
             if(SwitcherEffortPIDPublisher.get()!= nullptr) SwitcherEffortPIDPublisher->publish(SwitcherEffortPIDMsg);
 	}
+    }
+
+    void BarrelSwitcher::pid_callback(gary_msgs::msg::PID::SharedPtr msg) {
+        this->current_pos = msg->feedback;
     }
 
 //    void BarrelSwitcher::setzero() {
