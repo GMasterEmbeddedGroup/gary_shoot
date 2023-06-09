@@ -151,7 +151,7 @@ namespace gary_shoot {
             }
             switched = true;
         }
-        double threshold[2] = {-3.1,-0.1};
+        double threshold[2] = {-0.1,-3.1};
         response->success = switched?(current_pos <= threshold[(int)switched]):(current_pos >= threshold[(int)switched]);
     }
 
