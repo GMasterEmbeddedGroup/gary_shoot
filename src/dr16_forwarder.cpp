@@ -392,6 +392,7 @@ namespace gary_shoot{
     }
 
     void DR16Forwarder::client_callback(gary_msgs::msg::ClientCommand::SharedPtr msg) {
+        RCLCPP_INFO(this->get_logger(),"key pressed!");
         if(msg->keyboard_key_pressed == 'X') {
             this->stop_shoot_pressed_time_point = std::chrono::steady_clock::now();
             RCLCPP_INFO(this->get_logger(), "Received stop shooting msg.");
