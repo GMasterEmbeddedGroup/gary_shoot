@@ -26,8 +26,8 @@ namespace gary_shoot {
         effort_min = 0.2010;
         current_effort = effort_min;
 
-        SWITCH_TIME = 350.0;
-        DELAY_TIME = 300.0;
+        SWITCH_TIME = 400.0;
+        DELAY_TIME = 450.0;
         current_pos = 0.0;
 //        this->declare_parameter("tolerable_diff", M_PI_4 / 4);
 //        this->tolerable_diff = M_PI_4 / 4;
