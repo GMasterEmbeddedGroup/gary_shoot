@@ -30,10 +30,18 @@ namespace gary_shoot {
         this->declare_parameter("reverse_time_ms", 500);
         this->declare_parameter("single_shoot", true);
 
+        this->declare_parameter("left_back_shooter_wheel_send_topic", "/fric_left_back_pid/cmd");
+        this->declare_parameter("right_back_shooter_wheel_send_topic", "/fric_right_back_pid/cmd");
+
+        back_shooter_wheel_pid_target = 0.0;
+        back_shooter_wheel_pid_current_set = 0.0;
+
         this->shooter_wheel_receive_topic = "/shooter_wheel_controller_pid_set";
         this->trigger_wheel_receive_topic = "/trigger_wheel_controller_pid_set";
         this->left_wheel_send_topic = "/fric_left_pid/cmd";
         this->right_wheel_send_topic = "/fric_right_pid/cmd";
+        this->left_back_wheel_send_topic = "/fric_left_back_pid/cmd";
+        this->right_back_wheel_send_topic = "/fric_right_back_pid/cmd";
         this->shooter_wheel_pid_target = static_cast<double>(0.0f);
         this->trigger_wheel_send_topic = "/trigger_pid/cmd";
         this->trigger_wheel_pid_target = static_cast<double>(0.0f);
@@ -127,10 +135,25 @@ namespace gary_shoot {
                         std::bind(&ShooterController::position_pid_callback, this, std::placeholders::_1), sub_options);
 
 
+        left_back_wheel_send_topic = this->get_parameter("left_back_shooter_wheel_send_topic").as_string();
+        LeftBackShooterWheelPIDPublisher =
+                create_publisher<std_msgs::msg::Float64>(left_back_wheel_send_topic, rclcpp::SystemDefaultsQoS());
+
+        right_back_wheel_send_topic = this->get_parameter("right_back_shooter_wheel_send_topic").as_string();
+        RightBackShooterWheelPIDPublisher =
+                create_publisher<std_msgs::msg::Float64>(right_back_wheel_send_topic, rclcpp::SystemDefaultsQoS());
+
+        SubTriggerWheelPIDPublisher =
+                create_publisher<std_msgs::msg::Float64>("/sub_trigger_pid/cmd", rclcpp::SystemDefaultsQoS());
+
+
         reverse_pid_set = this->get_parameter("reverse_pid_set").as_double();
         diag_objs.emplace(this->get_parameter("trigger_wheel_diag_name").as_string(), false);
         diag_objs.emplace(this->get_parameter("left_shooter_wheel_diag_name").as_string(), false);
         diag_objs.emplace(this->get_parameter("right_shooter_wheel_diag_name").as_string(), false);
+        diag_objs.emplace("sub_trigger", false);
+        diag_objs.emplace("fric_right_back", false);
+        diag_objs.emplace("fric_left_back", false);
 
         BLOCK_TIME = this->get_parameter("block_time_ms").as_int();
         REVERSE_TIME = this->get_parameter("reverse_time_ms").as_int();
@@ -154,6 +177,9 @@ namespace gary_shoot {
         if (TriggerWheelPIDPublisher.get() != nullptr) TriggerWheelPIDPublisher.reset();
         if (RightShooterWheelPIDPublisher.get() != nullptr) RightShooterWheelPIDPublisher.reset();
         if (LeftShooterWheelPIDPublisher.get() != nullptr) LeftShooterWheelPIDPublisher.reset();
+        if (SubTriggerWheelPIDPublisher.get() != nullptr) TriggerWheelPIDPublisher.reset();
+        if (RightBackShooterWheelPIDPublisher.get() != nullptr) RightShooterWheelPIDPublisher.reset();
+        if (LeftBackShooterWheelPIDPublisher.get() != nullptr) LeftShooterWheelPIDPublisher.reset();
         if (TriggerSubscription.get() != nullptr) TriggerSubscription.reset();
         if (ShooterSubscription.get() != nullptr) ShooterSubscription.reset();
         if (TriggerPIDSubscription.get() != nullptr) TriggerPIDSubscription.reset();
@@ -169,9 +195,14 @@ namespace gary_shoot {
         using namespace std::chrono_literals;
         timer_update = this->create_wall_timer(1000ms / this->update_freq, [this] { data_publisher(); }, this->cb_group);
         timer_reverse = this->create_wall_timer(1000ms / 100.0, [this] { reverse_trigger(); }, this->cb_group);
+        this->back_shooter_wheel_pid_target = this->shooter_wheel_pid_target * shooter_scale;
+        this->sub_trigger_wheel_pid_target = this->trigger_wheel_pid_target * sub_trigger_scale;
         TriggerWheelPIDPublisher->on_activate();
+        SubTriggerWheelPIDPublisher->on_activate();
         RightShooterWheelPIDPublisher->on_activate();
         LeftShooterWheelPIDPublisher->on_activate();
+        RightBackShooterWheelPIDPublisher->on_activate();
+        LeftBackShooterWheelPIDPublisher->on_activate();
         TriggerWheelPositionPIDPublisher->on_activate();
 
         this->last_click_time = std::chrono::steady_clock::now();
@@ -192,6 +223,9 @@ namespace gary_shoot {
         if(TriggerPositionPIDSubscription.get() != nullptr){TriggerPositionPIDSubscription.reset();}
         if(list_controllers_client.get()!= nullptr){list_controllers_client.reset();}
         if(switch_controller_client.get()!= nullptr){switch_controller_client.reset();}
+        if (SubTriggerWheelPIDPublisher.get() != nullptr) TriggerWheelPIDPublisher.reset();
+        if (RightBackShooterWheelPIDPublisher.get() != nullptr) RightShooterWheelPIDPublisher.reset();
+        if (LeftBackShooterWheelPIDPublisher.get() != nullptr) LeftShooterWheelPIDPublisher.reset();
         TriggerSubscription.reset();
         ShooterSubscription.reset();
         TriggerPIDSubscription.reset();
@@ -211,6 +245,10 @@ namespace gary_shoot {
         if (TriggerSubscription.get() != nullptr) TriggerSubscription.reset();
         if (ShooterSubscription.get() != nullptr) ShooterSubscription.reset();
         if (TriggerPIDSubscription.get() != nullptr) TriggerPIDSubscription.reset();
+
+        if (SubTriggerWheelPIDPublisher.get() != nullptr) TriggerWheelPIDPublisher.reset();
+        if (RightBackShooterWheelPIDPublisher.get() != nullptr) RightShooterWheelPIDPublisher.reset();
+        if (LeftBackShooterWheelPIDPublisher.get() != nullptr) LeftShooterWheelPIDPublisher.reset();
 
         if(TriggerWheelPositionPIDPublisher.get()!= nullptr){TriggerWheelPositionPIDPublisher->on_deactivate();}
         if(TriggerPositionPIDSubscription.get() != nullptr){TriggerPositionPIDSubscription.reset();}
@@ -235,6 +273,10 @@ namespace gary_shoot {
         if (ShooterSubscription.get() != nullptr) ShooterSubscription.reset();
         if (TriggerPIDSubscription.get() != nullptr) TriggerPIDSubscription.reset();
 
+        if (SubTriggerWheelPIDPublisher.get() != nullptr) TriggerWheelPIDPublisher.reset();
+        if (RightBackShooterWheelPIDPublisher.get() != nullptr) RightShooterWheelPIDPublisher.reset();
+        if (LeftBackShooterWheelPIDPublisher.get() != nullptr) LeftShooterWheelPIDPublisher.reset();
+
         if(TriggerWheelPositionPIDPublisher.get()!= nullptr){TriggerWheelPositionPIDPublisher->on_deactivate();}
         if(TriggerPositionPIDSubscription.get() != nullptr){TriggerPositionPIDSubscription.reset();}
         if(list_controllers_client.get()!= nullptr){list_controllers_client.reset();}
@@ -252,8 +294,10 @@ namespace gary_shoot {
         if (!motor_offline) {
             if (this->trigger_on && this->shooter_on) {
                 this->trigger_wheel_current_set = (reverse ? this->reverse_pid_set : this->trigger_wheel_pid_target);
+                this->sub_trigger_wheel_current_set = (reverse ? 0.0 : this->sub_trigger_wheel_pid_target);
             } else {
                 this->trigger_wheel_current_set = static_cast<double>(0.0f);
+                this->sub_trigger_wheel_current_set = static_cast<double>(0.0f);
             }
             if (this->shooter_on) {
                 if (this->shooter_wheel_pid_current_set < this->shooter_wheel_pid_target) {
@@ -262,8 +306,15 @@ namespace gary_shoot {
                 } else {
                     this->shooter_wheel_pid_current_set = this->shooter_wheel_pid_target;
                 }
+                if (this->back_shooter_wheel_pid_current_set < this->back_shooter_wheel_pid_target) {
+                    this->back_shooter_wheel_pid_current_set += (((1000 / this->update_freq) / (5000 * abs(shooter_scale))) *
+                                                            this->back_shooter_wheel_pid_target);
+                } else {
+                    this->back_shooter_wheel_pid_current_set = this->back_shooter_wheel_pid_target;
+                }
             } else {
                 this->shooter_wheel_pid_current_set = static_cast<double>(0.0f);
+                this->back_shooter_wheel_pid_current_set = 0.0;
             }
             if (offline_warned) {
                 RCLCPP_INFO(this->get_logger(), "Motor reconnected");
@@ -276,11 +327,15 @@ namespace gary_shoot {
             }
             this->trigger_wheel_current_set = static_cast<double>(0.0f);
             this->shooter_wheel_pid_current_set = static_cast<double>(0.0f);
+            this->back_shooter_wheel_pid_current_set = 0.0;
         }
 
         this->LeftShooterWheelPIDMsg.data = (0 - shooter_wheel_pid_current_set);
         this->RightShooterWheelPIDMsg.data = shooter_wheel_pid_current_set;
+        this->LeftBackShooterWheelPIDMsg.data = (0 - back_shooter_wheel_pid_current_set);
+        this->RightBackShooterWheelPIDMsg.data = back_shooter_wheel_pid_current_set;
         this->TriggerWheelPIDMsg.data = trigger_wheel_current_set;
+        this->SubTriggerWheelPIDMsg.data = sub_trigger_wheel_current_set;
         auto clock = rclcpp::Clock();
         RCLCPP_DEBUG_THROTTLE(this->get_logger(), clock, 500, "L:%lf, R:%lf, P:%lf", this->LeftShooterWheelPIDMsg.data,
                               this->RightShooterWheelPIDMsg.data, this->TriggerWheelPIDMsg.data);
@@ -296,7 +351,12 @@ namespace gary_shoot {
         if (!zero_force) {
             LeftShooterWheelPIDPublisher->publish(LeftShooterWheelPIDMsg);
             RightShooterWheelPIDPublisher->publish(RightShooterWheelPIDMsg);
-            if(trigger_on) { TriggerWheelPIDPublisher->publish(TriggerWheelPIDMsg); }
+            LeftBackShooterWheelPIDPublisher->publish(LeftBackShooterWheelPIDMsg);
+            RightBackShooterWheelPIDPublisher->publish(RightBackShooterWheelPIDMsg);
+            if(trigger_on) {
+                TriggerWheelPIDPublisher->publish(TriggerWheelPIDMsg);
+                SubTriggerWheelPIDPublisher->publish(SubTriggerWheelPIDMsg);
+            }
         }
     }
 

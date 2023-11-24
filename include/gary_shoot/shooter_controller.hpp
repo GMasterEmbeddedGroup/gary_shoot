@@ -58,6 +58,15 @@ namespace gary_shoot{
         void position_pid_callback(gary_msgs::msg::PID::SharedPtr msg);
         rclcpp::Subscription<gary_msgs::msg::PID>::SharedPtr TriggerPositionPIDSubscription;
 
+        std_msgs::msg::Float64 LeftBackShooterWheelPIDMsg;
+        rclcpp_lifecycle::LifecyclePublisher<std_msgs::msg::Float64>::SharedPtr LeftBackShooterWheelPIDPublisher;
+
+        std_msgs::msg::Float64 RightBackShooterWheelPIDMsg;
+        rclcpp_lifecycle::LifecyclePublisher<std_msgs::msg::Float64>::SharedPtr RightBackShooterWheelPIDPublisher;
+
+        std_msgs::msg::Float64 SubTriggerWheelPIDMsg;
+        rclcpp_lifecycle::LifecyclePublisher<std_msgs::msg::Float64>::SharedPtr SubTriggerWheelPIDPublisher;
+
         rclcpp::Client<controller_manager_msgs::srv::ListControllers>::SharedPtr list_controllers_client;
         rclcpp::Client<controller_manager_msgs::srv::SwitchController>::SharedPtr switch_controller_client;
         std::shared_future<controller_manager_msgs::srv::ListControllers::Response::SharedPtr> lc_resp;
@@ -78,11 +87,21 @@ namespace gary_shoot{
 
         std::string left_wheel_send_topic;
         std::string right_wheel_send_topic;
+        std::string left_back_wheel_send_topic;
+        std::string right_back_wheel_send_topic;
         double shooter_wheel_pid_target;
         double shooter_wheel_pid_current_set;
         std::string trigger_wheel_send_topic;
         double trigger_wheel_pid_target;
         double trigger_wheel_current_set;
+        double sub_trigger_wheel_pid_target;
+        double sub_trigger_wheel_current_set;
+
+        double back_shooter_wheel_pid_target;
+        double back_shooter_wheel_pid_current_set;
+
+        double shooter_scale = 0.333;
+        double sub_trigger_scale = -2.0 / 500.0;
 
         std::string pid_topic;
 
