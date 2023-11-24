@@ -195,8 +195,6 @@ namespace gary_shoot {
         using namespace std::chrono_literals;
         timer_update = this->create_wall_timer(1000ms / this->update_freq, [this] { data_publisher(); }, this->cb_group);
         timer_reverse = this->create_wall_timer(1000ms / 100.0, [this] { reverse_trigger(); }, this->cb_group);
-        this->back_shooter_wheel_pid_target = this->shooter_wheel_pid_target * shooter_scale;
-        this->sub_trigger_wheel_pid_target = this->trigger_wheel_pid_target * sub_trigger_scale;
         TriggerWheelPIDPublisher->on_activate();
         SubTriggerWheelPIDPublisher->on_activate();
         RightShooterWheelPIDPublisher->on_activate();
@@ -363,6 +361,7 @@ namespace gary_shoot {
     void ShooterController::shooter_callback(std_msgs::msg::Float64::SharedPtr msg) {
         if (!DoubleEqual(msg->data, 0.0)) {
             this->shooter_wheel_pid_target = msg->data;
+            this->back_shooter_wheel_pid_target = this->shooter_wheel_pid_target * shooter_scale;
             this->shooter_on = true;
         } else if (DoubleEqual(msg->data, 0.0)) {
             this->shooter_on = false;
@@ -372,6 +371,7 @@ namespace gary_shoot {
     void ShooterController::trigger_callback(std_msgs::msg::Float64::SharedPtr msg) {
         if (!DoubleEqual(msg->data, 0.0)) {
             this->trigger_wheel_pid_target = msg->data;
+            this->sub_trigger_wheel_pid_target = this->trigger_wheel_pid_target * sub_trigger_scale;
             this->trigger_on = true;
         } else if (DoubleEqual(msg->data, 0.0)) {
             this->trigger_on = false;

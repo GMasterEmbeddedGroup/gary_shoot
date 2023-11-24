@@ -100,7 +100,7 @@ namespace gary_shoot{
         double back_shooter_wheel_pid_target;
         double back_shooter_wheel_pid_current_set;
 
-        double shooter_scale = 0.333;
+        double shooter_scale = 0.5;
         double sub_trigger_scale = -2.0 / 500.0;
 
         std::string pid_topic;
